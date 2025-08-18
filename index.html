@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.1</title>
+    <title>Géo-Navigation KMZ V1.3</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.1</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.3</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -340,7 +340,6 @@
                 if (recordedPolyline) map.removeLayer(recordedPolyline);
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
             } else if (recordedPath.length > 0) {
-                // If canceling, restore the original polyline
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
             }
             
@@ -382,11 +381,11 @@
             marker.on('contextmenu', deleteDrawnPoint);
             marker.on('drag', onMarkerDrag);
 
-            // MODIFICATION: Ajout de la gestion du glissement de la carte
-            marker.on('mouseover', () => {
+            // MODIFICATION: Nouvelle logique pour gérer le conflit de déplacement
+            marker.on('mousedown', () => {
                 map.dragging.disable();
             });
-            marker.on('mouseout', () => {
+            marker.on('mouseup', () => {
                 map.dragging.enable();
             });
 
@@ -406,9 +405,7 @@
             if (index > -1) {
                 drawnMarkers.splice(index, 1);
                 drawnPath.splice(index, 1);
-                
                 map.removeLayer(markerToDelete);
-                
                 if (drawnPolyline) {
                     drawnPolyline.setLatLngs(drawnPath);
                 }
@@ -729,11 +726,11 @@
                     m.on('contextmenu', deleteDrawnPoint);
                     m.on('drag', onMarkerDrag);
 
-                    // MODIFICATION: Ajout de la gestion du glissement de la carte
-                    m.on('mouseover', () => {
+                    // MODIFICATION: Nouvelle logique pour gérer le conflit de déplacement
+                    m.on('mousedown', () => {
                         map.dragging.disable();
                     });
-                    m.on('mouseout', () => {
+                    m.on('mouseup', () => {
                         map.dragging.enable();
                     });
                     
