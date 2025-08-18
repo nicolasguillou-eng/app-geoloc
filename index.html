@@ -195,7 +195,7 @@
         let isRecording = false;
         let isNavigating = false;
         let isDrawing = false;
-        let isEditing = false; // MODIFICATION: Nouvel état
+        let isEditing = false;
         let geolocationAvailable = true;
         
         // Variables pour le mode dessin/édition
@@ -211,7 +211,7 @@
         const drawBtn = document.getElementById('draw-path-btn');
         const confirmDrawBtn = document.getElementById('confirm-draw-btn');
         const cancelDrawBtn = document.getElementById('cancel-draw-btn');
-        const editBtn = document.getElementById('edit-path-btn'); // MODIFICATION
+        const editBtn = document.getElementById('edit-path-btn');
         
         const mainControls = document.getElementById('main-controls');
         const drawControls = document.getElementById('draw-controls');
@@ -273,7 +273,7 @@
             loadInput.disabled = isBusy;
             loadInput.parentElement.classList.toggle('disabled-button', isBusy);
             downloadBtn.disabled = !hasPath || isBusy;
-            editBtn.disabled = !hasPath || isBusy; // MODIFICATION
+            editBtn.disabled = !hasPath || isBusy;
 
             if (isDrawing || isEditing) {
                 mainControls.classList.add('hidden');
@@ -343,7 +343,7 @@
         function startEditing() {
             isEditing = true;
             drawModeMessage.textContent = "Mode édition : déplacez, ajoutez ou supprimez des points.";
-            drawnPath = recordedPath.map(p => [...p]); // Copie du parcours
+            drawnPath = recordedPath.map(p => [...p]);
             
             drawnPath.forEach(latLng => {
                 createEditableMarker(latLng);
@@ -382,6 +382,9 @@
             }).addTo(map);
             marker.on('contextmenu', deleteDrawnPoint);
             marker.on('drag', onMarkerDrag);
+            // MODIFICATION: Correction du bug de déplacement de la carte
+            marker.on('dragstart', () => map.dragging.disable());
+            marker.on('dragend', () => map.dragging.enable());
             drawnMarkers.push(marker);
             return marker;
         }
