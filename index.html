@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.0</title>
+    <title>Géo-Navigation KMZ V1.1</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.0</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.1</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -353,21 +353,15 @@
             updateUIState();
         }
 
-        // MODIFICATION: Remplacement de la fonction pour une mise à jour en temps réel
         function onMarkerDrag(e) {
             const draggedMarker = e.target;
             const index = drawnMarkers.indexOf(draggedMarker);
             
             if (index > -1) {
-                // Mettre à jour notre tableau de données avec les nouvelles coordonnées
                 drawnPath[index] = [draggedMarker.getLatLng().lat, draggedMarker.getLatLng().lng];
-                
-                // Redessiner la polyligne avec le tracé mis à jour
                 if (drawnPolyline) {
                     drawnPolyline.setLatLngs(drawnPath);
                 }
-                
-                // Mettre à jour les informations de distance affichées
                 updateDrawingInfo();
             }
         }
@@ -377,7 +371,6 @@
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
 
-            // MODIFICATION: L'événement est maintenant 'drag' et appelle onMarkerDrag
             const marker = L.circleMarker(latLng, { 
                 radius: 6, 
                 color: 'orange', 
@@ -387,7 +380,16 @@
             }).addTo(map);
 
             marker.on('contextmenu', deleteDrawnPoint);
-            marker.on('drag', onMarkerDrag); // L'événement 'drag' permet une mise à jour en direct
+            marker.on('drag', onMarkerDrag);
+
+            // MODIFICATION: Ajout de la gestion du glissement de la carte
+            marker.on('mouseover', () => {
+                map.dragging.disable();
+            });
+            marker.on('mouseout', () => {
+                map.dragging.enable();
+            });
+
             drawnMarkers.push(marker);
 
             if (!drawnPolyline) {
@@ -716,7 +718,6 @@
                 if (drawnPolyline) map.removeLayer(drawnPolyline);
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5,10' }).addTo(map);
                 
-                // MODIFICATION: L'événement est maintenant 'drag' et appelle onMarkerDrag
                 drawnMarkers = drawnPath.map(p => {
                     const m = L.circleMarker(p, { 
                         radius: 6, 
@@ -726,7 +727,16 @@
                         draggable: true
                     }).addTo(map);
                     m.on('contextmenu', deleteDrawnPoint);
-                    m.on('drag', onMarkerDrag); // L'événement 'drag' permet une mise à jour en direct
+                    m.on('drag', onMarkerDrag);
+
+                    // MODIFICATION: Ajout de la gestion du glissement de la carte
+                    m.on('mouseover', () => {
+                        map.dragging.disable();
+                    });
+                    m.on('mouseout', () => {
+                        map.dragging.enable();
+                    });
+                    
                     return m;
                 });
                 startDrawing();
@@ -754,5 +764,3 @@
     </script>
 </body>
 </html>
-
-
