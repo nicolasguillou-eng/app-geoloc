@@ -132,10 +132,9 @@
             </label>
         </div>
         
-        <!-- Section Contrôles de Dessin -->
+        <!-- Section Contrôles de Dessin/Édition -->
         <div id="draw-controls" class="hidden">
-            <p class="text-center text-blue-600 font-semibold mb-2">Mode création : cliquez pour ajouter, clic droit pour supprimer.</p>
-            <!-- MODIFICATION: Ajout de l'affichage des distances de dessin -->
+            <p id="draw-mode-message" class="text-center text-blue-600 font-semibold mb-2"></p>
             <div id="draw-info" class="text-center text-sm text-gray-600 my-2">
                 <p id="last-segment-info"></p>
                 <p id="total-draw-distance-info" class="font-bold"></p>
@@ -152,11 +151,15 @@
             </div>
         </div>
         
-        <!-- Section Export -->
-        <div class="text-center">
-             <button id="download-kmz-btn" class="w-full md:w-1/2 mx-auto flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-600 transition-colors duration-200" disabled>
+        <!-- Section Export/Édition -->
+        <div id="path-actions" class="flex justify-center gap-4">
+             <button id="edit-path-btn" class="w-full md:w-1/2 flex items-center justify-center gap-2 bg-indigo-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-indigo-600 transition-colors duration-200" disabled>
+                <i data-lucide="edit"></i>
+                <span>Éditer le Parcours</span>
+            </button>
+             <button id="download-kmz-btn" class="w-full md:w-1/2 flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-600 transition-colors duration-200" disabled>
                 <i data-lucide="download"></i>
-                <span>Exporter le Parcours Actuel</span>
+                <span>Exporter le Parcours</span>
             </button>
         </div>
         
@@ -192,9 +195,10 @@
         let isRecording = false;
         let isNavigating = false;
         let isDrawing = false;
+        let isEditing = false; // MODIFICATION: Nouvel état
         let geolocationAvailable = true;
         
-        // Variables pour le mode dessin
+        // Variables pour le mode dessin/édition
         let drawnPath = [];
         let drawnPolyline;
         let drawnMarkers = [];
@@ -207,16 +211,18 @@
         const drawBtn = document.getElementById('draw-path-btn');
         const confirmDrawBtn = document.getElementById('confirm-draw-btn');
         const cancelDrawBtn = document.getElementById('cancel-draw-btn');
+        const editBtn = document.getElementById('edit-path-btn'); // MODIFICATION
         
         const mainControls = document.getElementById('main-controls');
         const drawControls = document.getElementById('draw-controls');
+        const pathActions = document.getElementById('path-actions');
         const mapElement = document.getElementById('map');
         const geolocationStatusDiv = document.getElementById('geolocation-status');
         const geolocationStatusMessage = document.getElementById('geolocation-status-message');
         
-        // MODIFICATION: IDs pour les infos de dessin
         const lastSegmentInfo = document.getElementById('last-segment-info');
         const totalDrawDistanceInfo = document.getElementById('total-draw-distance-info');
+        const drawModeMessage = document.getElementById('draw-mode-message');
         
         const compassArrow = document.getElementById('compass-arrow');
         const navigationSection = document.getElementById('navigation-section');
@@ -239,7 +245,6 @@
             notificationBanner.classList.remove('bg-red-500', 'bg-gray-800');
             notificationBanner.classList.add(isError ? 'bg-red-500' : 'bg-gray-800');
             notificationBanner.classList.remove('hidden', 'opacity-0');
-
             clearTimeout(notificationTimeout);
             notificationTimeout = setTimeout(() => {
                 notificationBanner.classList.add('opacity-0');
@@ -258,7 +263,7 @@
 
         function updateUIState() {
             const hasPath = recordedPath.length > 0;
-            const isBusy = isRecording || isNavigating || isDrawing;
+            const isBusy = isRecording || isNavigating || isDrawing || isEditing;
             
             startBtn.disabled = isBusy || !geolocationAvailable;
             if (!geolocationAvailable) startBtn.title = "La géolocalisation n'est pas disponible ou autorisée.";
@@ -268,13 +273,16 @@
             loadInput.disabled = isBusy;
             loadInput.parentElement.classList.toggle('disabled-button', isBusy);
             downloadBtn.disabled = !hasPath || isBusy;
+            editBtn.disabled = !hasPath || isBusy; // MODIFICATION
 
-            if (isDrawing) {
+            if (isDrawing || isEditing) {
                 mainControls.classList.add('hidden');
+                pathActions.classList.add('hidden');
                 drawControls.classList.remove('hidden');
                 mapElement.classList.add('drawing-mode');
             } else {
                 mainControls.classList.remove('hidden');
+                pathActions.classList.remove('hidden');
                 drawControls.classList.add('hidden');
                 mapElement.classList.remove('drawing-mode');
             }
@@ -321,9 +329,10 @@
             updateUIState();
         }
 
-        // --- LOGIQUE DE DESSIN SUR LA CARTE ---
+        // --- LOGIQUE DE DESSIN ET D'ÉDITION SUR LA CARTE ---
         function startDrawing() {
             isDrawing = true;
+            drawModeMessage.textContent = "Mode création : cliquez pour ajouter, clic droit pour supprimer.";
             recordedPath = [];
             if (recordedPolyline) map.removeLayer(recordedPolyline);
             recordedPolyline = null;
@@ -331,70 +340,92 @@
             updateDrawingInfo();
         }
 
-        function stopDrawing(savePath) {
+        function startEditing() {
+            isEditing = true;
+            drawModeMessage.textContent = "Mode édition : déplacez, ajoutez ou supprimez des points.";
+            drawnPath = recordedPath.map(p => [...p]); // Copie du parcours
+            
+            drawnPath.forEach(latLng => {
+                createEditableMarker(latLng);
+            });
+
+            if (!drawnPolyline) {
+                drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
+            } else {
+                drawnPolyline.setLatLngs(drawnPath);
+            }
+            
+            updateUIState();
+            updateDrawingInfo();
+        }
+
+        function stopDrawingOrEditing(savePath) {
             if (savePath && drawnPath.length > 0) {
                 recordedPath = [...drawnPath];
                 if (recordedPolyline) map.removeLayer(recordedPolyline);
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
             }
+            
             if (drawnPolyline) map.removeLayer(drawnPolyline);
             drawnMarkers.forEach(marker => map.removeLayer(marker));
             drawnPath = [];
             drawnPolyline = null;
             drawnMarkers = [];
             isDrawing = false;
+            isEditing = false;
             updateUIState();
         }
 
+        function createEditableMarker(latLng) {
+            const marker = L.circleMarker(latLng, { 
+                radius: 6, color: 'orange', fillColor: '#f97316', fillOpacity: 1, draggable: true 
+            }).addTo(map);
+            marker.on('contextmenu', deleteDrawnPoint);
+            marker.on('drag', onMarkerDrag);
+            drawnMarkers.push(marker);
+            return marker;
+        }
+
         function onMapClick(e) {
-            if (!isDrawing) return;
+            if (!isDrawing && !isEditing) return;
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
-
-            const marker = L.circleMarker(latLng, { radius: 6, color: 'orange', fillColor: '#f97316', fillOpacity: 1 }).addTo(map);
-            // MODIFICATION: Ajout de l'événement clic droit pour supprimer
-            marker.on('contextmenu', deleteDrawnPoint);
-            drawnMarkers.push(marker);
-
-            if (!drawnPolyline) {
-                drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
-            } else {
-                drawnPolyline.addLatLng(latLng);
-            }
+            createEditableMarker(latLng);
+            drawnPolyline.addLatLng(latLng);
             updateDrawingInfo();
         }
 
-        // MODIFICATION: Nouvelle fonction pour supprimer un point
-        function deleteDrawnPoint(e) {
-            const markerToDelete = e.target;
-            const index = drawnMarkers.indexOf(markerToDelete);
+        function onMarkerDrag(e) {
+            const draggedMarker = e.target;
+            const index = drawnMarkers.indexOf(draggedMarker);
             if (index > -1) {
-                // Supprimer des tableaux
-                drawnMarkers.splice(index, 1);
-                drawnPath.splice(index, 1);
-                // Supprimer de la carte
-                map.removeLayer(markerToDelete);
-                // Mettre à jour la ligne
-                if (drawnPolyline) {
-                    drawnPolyline.setLatLngs(drawnPath);
-                }
-                // Mettre à jour les infos
+                drawnPath[index] = [draggedMarker.getLatLng().lat, draggedMarker.getLatLng().lng];
+                drawnPolyline.setLatLngs(drawnPath);
                 updateDrawingInfo();
             }
         }
 
-        // MODIFICATION: Nouvelle fonction pour afficher les infos de dessin
+        function deleteDrawnPoint(e) {
+            const markerToDelete = e.target;
+            const index = drawnMarkers.indexOf(markerToDelete);
+            if (index > -1) {
+                drawnMarkers.splice(index, 1);
+                drawnPath.splice(index, 1);
+                map.removeLayer(markerToDelete);
+                if (drawnPolyline) drawnPolyline.setLatLngs(drawnPath);
+                updateDrawingInfo();
+            }
+        }
+
         function updateDrawingInfo() {
             let lastSegmentDist = 0;
             let totalDist = 0;
-
             if (drawnPath.length >= 2) {
                 lastSegmentDist = calculateDistance(drawnPath[drawnPath.length - 2], drawnPath[drawnPath.length - 1]);
                 for (let i = 0; i < drawnPath.length - 1; i++) {
                     totalDist += calculateDistance(drawnPath[i], drawnPath[i + 1]);
                 }
             }
-            
             lastSegmentInfo.textContent = `Dernier segment : ${formatDistance(lastSegmentDist)}`;
             totalDrawDistanceInfo.textContent = `Distance totale : ${formatDistance(totalDist)}`;
         }
@@ -408,18 +439,14 @@
             isNavigating = true;
             navigationPath = path;
             currentTargetIndex = 1;
-
             totalNavigationDistance = 0;
             for (let i = 0; i < navigationPath.length - 1; i++) {
                 totalNavigationDistance += calculateDistance(navigationPath[i], navigationPath[i + 1]);
             }
-
             if (navigationPolyline) map.removeLayer(navigationPolyline);
             navigationPolyline = L.polyline(navigationPath, { color: 'purple', weight: 5, opacity: 0.8 }).addTo(map);
             map.fitBounds(navigationPolyline.getBounds());
-            
             navigationSection.classList.remove('hidden');
-            
             if (geolocationAvailable) {
                 orientationMsg.classList.remove('hidden');
                 compassArrow.parentElement.classList.remove('hidden');
@@ -428,7 +455,6 @@
                 compassArrow.parentElement.classList.add('hidden');
                 showNotification("Navigation sans GPS. Utilisez les flèches pour avancer.", 4000);
             }
-            
             updateTargetWaypoint(currentTargetIndex);
             updateUIState();
         }
@@ -442,12 +468,10 @@
             orientationMsg.classList.add('hidden');
             if(navigationPolyline) map.removeLayer(navigationPolyline);
             navigationPolyline = null;
-            
             if (targetMarker) {
                 map.removeLayer(targetMarker);
                 targetMarker = null;
             }
-            
             nextWaypointDistanceInfo.textContent = "";
             totalDistanceInfo.textContent = "";
             progressBar.style.width = '0%';
@@ -457,20 +481,14 @@
         
         function updateTargetWaypoint(index) {
             if (index < 0 || index >= navigationPath.length) return;
-            
             currentTargetIndex = index;
             const targetLatLng = navigationPath[currentTargetIndex];
-
             if (!targetMarker) {
-                targetMarker = L.circleMarker(targetLatLng, {
-                    radius: 8, color: '#ffffff', weight: 2, fillColor: '#ef4444', fillOpacity: 1, pane: 'markerPane'
-                }).addTo(map);
+                targetMarker = L.circleMarker(targetLatLng, { radius: 8, color: '#ffffff', weight: 2, fillColor: '#ef4444', fillOpacity: 1, pane: 'markerPane' }).addTo(map);
             } else {
                 targetMarker.setLatLng(targetLatLng);
             }
-
             statusMessage.textContent = `Point Cible : ${currentTargetIndex + 1} / ${navigationPath.length}`;
-            
             if (totalNavigationDistance > 0) {
                 let distanceCovered = 0;
                 for (let i = 0; i < currentTargetIndex; i++) {
@@ -480,43 +498,35 @@
                 progressBar.style.width = `${percentage}%`;
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
-
             if (userMarker) {
                 updateNavigation(userMarker.getLatLng());
             } else {
                 nextWaypointDistanceInfo.textContent = "Distance indisponible sans GPS";
                 totalDistanceInfo.textContent = "";
             }
-
             prevWaypointBtn.disabled = currentTargetIndex <= 0;
             nextWaypointBtn.disabled = currentTargetIndex >= navigationPath.length - 1;
         }
 
         function updateNavigation(currentLatLng) {
             if (!isNavigating || currentTargetIndex < 0) return;
-            
             const targetLatLng = navigationPath[currentTargetIndex];
             const bearing = calculateBearing(currentLatLng, targetLatLng);
             compassArrow.dataset.targetBearing = bearing;
-
             const distanceToNextWaypoint = calculateDistance(currentLatLng, targetLatLng);
             nextWaypointDistanceInfo.textContent = `Point ${currentTargetIndex + 1} : ${distanceToNextWaypoint.toFixed(0)} m`;
-
             let remainingPathDistance = 0;
             for (let i = currentTargetIndex; i < navigationPath.length - 1; i++) {
                 remainingPathDistance += calculateDistance(navigationPath[i], navigationPath[i + 1]);
             }
             const totalRemainingDistance = distanceToNextWaypoint + remainingPathDistance;
-
             totalDistanceInfo.textContent = `Restant : ${formatDistance(totalRemainingDistance)}`;
-
             if (totalNavigationDistance > 0) {
                 const completedDistance = totalNavigationDistance - totalRemainingDistance;
                 const percentage = Math.min(100, Math.max(0, (completedDistance / totalNavigationDistance) * 100));
                 progressBar.style.width = `${percentage}%`;
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
-
             if (distanceToNextWaypoint < 25 && currentTargetIndex < navigationPath.length - 1) {
                 updateTargetWaypoint(currentTargetIndex + 1);
             } else if (distanceToNextWaypoint < 25 && currentTargetIndex === navigationPath.length - 1) {
@@ -554,9 +564,7 @@
         
         // --- CALCULS GÉODÉSIQUES ET UTILITAIRES ---
         function formatDistance(distance) {
-            if (distance > 1000) {
-                return `${(distance / 1000).toFixed(2)} km`;
-            }
+            if (distance > 1000) return `${(distance / 1000).toFixed(2)} km`;
             return `${distance.toFixed(0)} m`;
         }
         function toRad(deg) { return deg * Math.PI / 180; }
@@ -623,16 +631,24 @@
                 return (isNaN(lat) || isNaN(lon)) ? null : [lat, lon];
             }).filter(Boolean);
             
-            if (points.length > 0) startNavigation(points);
-            else showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
+            if (points.length > 0) {
+                recordedPath = points;
+                if(recordedPolyline) map.removeLayer(recordedPolyline);
+                recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
+                map.fitBounds(recordedPolyline.getBounds());
+                updateUIState();
+            } else {
+                showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
+            }
         }
         
         // --- ÉCOUTEURS D'ÉVÉNEMENTS ---
         startBtn.addEventListener('click', () => { isRecording = true; recordedPath = []; if (recordedPolyline) map.removeLayer(recordedPolyline); recordedPolyline = null; updateUIState(); });
         stopBtn.addEventListener('click', () => { isRecording = false; updateUIState(); });
         drawBtn.addEventListener('click', startDrawing);
-        confirmDrawBtn.addEventListener('click', () => stopDrawing(true));
-        cancelDrawBtn.addEventListener('click', () => stopDrawing(false));
+        editBtn.addEventListener('click', startEditing);
+        confirmDrawBtn.addEventListener('click', () => stopDrawingOrEditing(true));
+        cancelDrawBtn.addEventListener('click', () => stopDrawingOrEditing(false));
         downloadBtn.addEventListener('click', downloadKmz);
         loadInput.addEventListener('change', loadFile);
         orientationMsg.addEventListener('click', requestOrientationPermission);
