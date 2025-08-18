@@ -5,17 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Géo-Navigation KMZ</title>
     
-    <!-- Tailwind CSS pour le style -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Leaflet.js pour la carte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo" crossorigin=""></script>
     
-    <!-- JSZip.js pour créer les fichiers .kmz -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     
-    <!-- Lucide Icons pour les icônes -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <style>
@@ -69,21 +65,18 @@
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
             <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ</h1>
-            <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
+            <p class="text-gray-500 mt-1">Enregistrez, créez, éditez, exportez et suivez vos parcours.</p>
         </header>
 
-        <!-- Section Carte -->
         <div id="map-section">
             <div id="map" class="w-full z-0"></div>
         </div>
         
-        <!-- Message d'état de la géolocalisation -->
         <div id="geolocation-status" class="hidden flex items-center justify-center gap-3 text-center bg-yellow-100 text-yellow-800 p-3 rounded-lg text-sm mt-4">
             <i data-lucide="alert-triangle" class="h-5 w-5 flex-shrink-0"></i>
             <span id="geolocation-status-message"></span>
         </div>
 
-        <!-- Section Boussole et Statut -->
         <div id="navigation-section" class="flex flex-col md:flex-row items-center justify-around gap-6 hidden">
             <div class="compass-container">
                 <div id="compass-arrow" class="compass-arrow"></div>
@@ -102,7 +95,6 @@
                 <div class="space-y-1">
                     <p id="next-waypoint-distance-info" class="text-sm text-gray-600"></p>
                     <p id="total-distance-info" class="text-md font-bold text-gray-800"></p>
-                    <!-- Barre de progression et pourcentage -->
                     <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
                         <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
                     </div>
@@ -111,7 +103,6 @@
             </div>
         </div>
 
-        <!-- Section Contrôles Principaux -->
         <div id="main-controls" class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <button id="start-record-btn" class="flex items-center justify-center gap-2 bg-green-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-600 transition-colors duration-200">
                 <i data-lucide="play-circle"></i>
@@ -132,10 +123,8 @@
             </label>
         </div>
         
-        <!-- Section Contrôles de Dessin -->
         <div id="draw-controls" class="hidden">
-            <p class="text-center text-blue-600 font-semibold mb-2">Mode création : cliquez pour ajouter, clic droit pour supprimer.</p>
-            <!-- MODIFICATION: Ajout de l'affichage des distances de dessin -->
+            <p id="draw-mode-message" class="text-center text-blue-600 font-semibold mb-2"></p>
             <div id="draw-info" class="text-center text-sm text-gray-600 my-2">
                 <p id="last-segment-info"></p>
                 <p id="total-draw-distance-info" class="font-bold"></p>
@@ -152,22 +141,23 @@
             </div>
         </div>
         
-        <!-- Section Export -->
-        <div class="text-center">
-             <button id="download-kmz-btn" class="w-full md:w-1/2 mx-auto flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-600 transition-colors duration-200" disabled>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <button id="edit-path-btn" class="flex items-center justify-center gap-2 bg-indigo-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-indigo-600 transition-colors duration-200" disabled>
+                <i data-lucide="pencil"></i>
+                <span>Éditer le Parcours</span>
+            </button>
+             <button id="download-kmz-btn" class="flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-600 transition-colors duration-200" disabled>
                 <i data-lucide="download"></i>
-                <span>Exporter le Parcours Actuel</span>
+                <span>Exporter le Parcours</span>
             </button>
         </div>
         
-        <!-- Message d'information pour la boussole -->
         <div id="orientation-permission-msg" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-r-lg" role="alert">
             <p class="font-bold">Action requise</p>
             <p>Cliquez ici pour activer la boussole. Votre navigateur va demander l'accès aux capteurs de mouvement.</p>
         </div>
     </div>
 
-    <!-- Bannière de notification -->
     <div id="notification-banner" class="hidden fixed top-5 right-5 bg-gray-800 text-white py-3 px-5 rounded-lg shadow-lg transition-all duration-300 opacity-0">
         <p id="notification-message"></p>
     </div>
@@ -192,9 +182,10 @@
         let isRecording = false;
         let isNavigating = false;
         let isDrawing = false;
+        let isEditing = false; // Nouvel état pour l'édition
         let geolocationAvailable = true;
         
-        // Variables pour le mode dessin
+        // Variables pour le mode dessin/édition
         let drawnPath = [];
         let drawnPolyline;
         let drawnMarkers = [];
@@ -205,16 +196,17 @@
         const downloadBtn = document.getElementById('download-kmz-btn');
         const loadInput = document.getElementById('load-kmz-input');
         const drawBtn = document.getElementById('draw-path-btn');
+        const editBtn = document.getElementById('edit-path-btn'); // Nouveau bouton
         const confirmDrawBtn = document.getElementById('confirm-draw-btn');
         const cancelDrawBtn = document.getElementById('cancel-draw-btn');
         
         const mainControls = document.getElementById('main-controls');
         const drawControls = document.getElementById('draw-controls');
+        const drawModeMessage = document.getElementById('draw-mode-message');
         const mapElement = document.getElementById('map');
         const geolocationStatusDiv = document.getElementById('geolocation-status');
         const geolocationStatusMessage = document.getElementById('geolocation-status-message');
         
-        // MODIFICATION: IDs pour les infos de dessin
         const lastSegmentInfo = document.getElementById('last-segment-info');
         const totalDrawDistanceInfo = document.getElementById('total-draw-distance-info');
         
@@ -258,21 +250,22 @@
 
         function updateUIState() {
             const hasPath = recordedPath.length > 0;
-            const isBusy = isRecording || isNavigating || isDrawing;
+            const isBusy = isRecording || isNavigating || isDrawing || isEditing;
             
             startBtn.disabled = isBusy || !geolocationAvailable;
             if (!geolocationAvailable) startBtn.title = "La géolocalisation n'est pas disponible ou autorisée.";
             
             stopBtn.disabled = !isRecording;
             drawBtn.disabled = isBusy;
+            editBtn.disabled = !hasPath || isBusy; // Logique pour le bouton éditer
             loadInput.disabled = isBusy;
             loadInput.parentElement.classList.toggle('disabled-button', isBusy);
             downloadBtn.disabled = !hasPath || isBusy;
 
-            if (isDrawing) {
+            if (isDrawing || isEditing) {
                 mainControls.classList.add('hidden');
                 drawControls.classList.remove('hidden');
-                mapElement.classList.add('drawing-mode');
+                mapElement.classList.add(isDrawing ? 'drawing-mode' : '');
             } else {
                 mainControls.classList.remove('hidden');
                 drawControls.classList.add('hidden');
@@ -314,16 +307,18 @@
         
         function handlePositionError(error) {
             console.error(`Erreur de géolocalisation: ${error.message}`);
-            geolocationStatusMessage.textContent = "Géolocalisation bloquée. L'enregistrement GPS et la navigation en direct sont désactivés. Les autres fonctions restent disponibles.";
+            geolocationStatusMessage.textContent = "Géolocalisation bloquée. L'enregistrement et la navigation GPS sont désactivés.";
             geolocationStatusDiv.classList.remove('hidden');
             lucide.createIcons();
             geolocationAvailable = false;
             updateUIState();
         }
 
-        // --- LOGIQUE DE DESSIN SUR LA CARTE ---
+        // --- LOGIQUE DE DESSIN ET D'ÉDITION ---
         function startDrawing() {
             isDrawing = true;
+            drawModeMessage.textContent = "Mode création : cliquez pour ajouter, clic droit pour supprimer.";
+            // Efface le parcours précédent pour en créer un nouveau
             recordedPath = [];
             if (recordedPolyline) map.removeLayer(recordedPolyline);
             recordedPolyline = null;
@@ -331,18 +326,52 @@
             updateDrawingInfo();
         }
 
-        function stopDrawing(savePath) {
+        // Nouvelle fonction pour démarrer l'édition
+        function startEditing() {
+            if (recordedPath.length === 0) return;
+            isEditing = true;
+            drawModeMessage.textContent = "Mode édition : glissez les points, clic droit pour supprimer.";
+            
+            drawnPath = [...recordedPath]; // Copie du parcours existant
+            
+            if(recordedPolyline) recordedPolyline.setStyle({ opacity: 0.2 }); // Estompe l'ancien tracé
+
+            drawnPath.forEach(latLng => {
+                const marker = L.marker(latLng, { draggable: true, icon: L.divIcon({
+                    className: 'leaflet-div-icon',
+                    html: `<div class="bg-orange-500 w-4 h-4 rounded-full border-2 border-white shadow-lg"></div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                }) }).addTo(map);
+                marker.on('contextmenu', deleteDrawnPoint);
+                marker.on('drag', updatePolylineOnDrag);
+                marker.on('dragend', updateDrawingInfo);
+                drawnMarkers.push(marker);
+            });
+            
+            drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
+            
+            updateUIState();
+            updateDrawingInfo();
+        }
+
+        function exitDrawOrEditMode(savePath) {
             if (savePath && drawnPath.length > 0) {
                 recordedPath = [...drawnPath];
                 if (recordedPolyline) map.removeLayer(recordedPolyline);
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
+            } else if (isEditing && recordedPolyline) {
+                 recordedPolyline.setStyle({ opacity: 1 }); // Restaure l'opacité si on annule l'édition
             }
+            
+            // Nettoyage
             if (drawnPolyline) map.removeLayer(drawnPolyline);
             drawnMarkers.forEach(marker => map.removeLayer(marker));
             drawnPath = [];
             drawnPolyline = null;
             drawnMarkers = [];
             isDrawing = false;
+            isEditing = false;
             updateUIState();
         }
 
@@ -351,53 +380,63 @@
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
 
-            const marker = L.circleMarker(latLng, { radius: 6, color: 'orange', fillColor: '#f97316', fillOpacity: 1 }).addTo(map);
-            // MODIFICATION: Ajout de l'événement clic droit pour supprimer
+            const marker = L.marker(latLng, { draggable: true, icon: L.divIcon({
+                className: 'leaflet-div-icon',
+                html: `<div class="bg-orange-500 w-4 h-4 rounded-full border-2 border-white shadow-lg"></div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            }) }).addTo(map);
             marker.on('contextmenu', deleteDrawnPoint);
+            // Ajout des events de drag pour le cas où on voudrait déplacer un point juste après l'avoir créé
+            marker.on('drag', updatePolylineOnDrag);
+            marker.on('dragend', updateDrawingInfo);
             drawnMarkers.push(marker);
 
             if (!drawnPolyline) {
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
             } else {
-                drawnPolyline.addLatLng(latLng);
+                drawnPolyline.setLatLngs(drawnPath);
             }
             updateDrawingInfo();
         }
 
-        // MODIFICATION: Nouvelle fonction pour supprimer un point
         function deleteDrawnPoint(e) {
+            L.DomEvent.stopPropagation(e); // Empêche le clic droit de se propager à la carte
             const markerToDelete = e.target;
             const index = drawnMarkers.indexOf(markerToDelete);
             if (index > -1) {
-                // Supprimer des tableaux
                 drawnMarkers.splice(index, 1);
                 drawnPath.splice(index, 1);
-                // Supprimer de la carte
                 map.removeLayer(markerToDelete);
-                // Mettre à jour la ligne
-                if (drawnPolyline) {
-                    drawnPolyline.setLatLngs(drawnPath);
-                }
-                // Mettre à jour les infos
+                if (drawnPolyline) drawnPolyline.setLatLngs(drawnPath);
                 updateDrawingInfo();
             }
         }
+        
+        function updatePolylineOnDrag(e) {
+            const marker = e.target;
+            const index = drawnMarkers.indexOf(marker);
+            if (index > -1) {
+                drawnPath[index] = [marker.getLatLng().lat, marker.getLatLng().lng];
+                if(drawnPolyline) drawnPolyline.setLatLngs(drawnPath);
+            }
+        }
 
-        // MODIFICATION: Nouvelle fonction pour afficher les infos de dessin
         function updateDrawingInfo() {
             let lastSegmentDist = 0;
             let totalDist = 0;
 
             if (drawnPath.length >= 2) {
                 lastSegmentDist = calculateDistance(drawnPath[drawnPath.length - 2], drawnPath[drawnPath.length - 1]);
-                for (let i = 0; i < drawnPath.length - 1; i++) {
-                    totalDist += calculateDistance(drawnPath[i], drawnPath[i + 1]);
-                }
+            }
+            for (let i = 0; i < drawnPath.length - 1; i++) {
+                totalDist += calculateDistance(drawnPath[i], drawnPath[i + 1]);
             }
             
             lastSegmentInfo.textContent = `Dernier segment : ${formatDistance(lastSegmentDist)}`;
             totalDrawDistanceInfo.textContent = `Distance totale : ${formatDistance(totalDist)}`;
         }
+
 
         // --- LOGIQUE DE NAVIGATION ET BOUSSOLE ---
         function startNavigation(path) {
@@ -563,9 +602,7 @@
         function toDeg(rad) { return rad * 180 / Math.PI; }
         function calculateDistance(p1, p2) { const R=6371e3;const[lat1,lon1]=[toRad(p1[0]),toRad(p1[1])];const[lat2,lon2]=[toRad(p2[0]),toRad(p2[1])];const dLat=lat2-lat1,dLon=lon2-lon1;const a=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
         function calculateBearing(p1, p2) { const[lat1,lon1]=[toRad(p1[0]),toRad(p1[1])];const[lat2,lon2]=[toRad(p2[0]),toRad(p2[1])];const y=Math.sin(lon2-lon1)*Math.cos(lat2);const x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(lon2-lon1);return(toDeg(Math.atan2(y,x))+360)%360; }
-        function findClosestPointOnPath(point, path) { let minDistance=Infinity,closestPointIndex=-1;for(let i=0;i<path.length-1;i++){const d=perpendicularDistance(point,path[i],path[i+1]);if(d<minDistance){minDistance=d;closestPointIndex=i;}} if(closestPointIndex===-1)return path.length>0?{index:0,distance:calculateDistance(point,path[0])}:null;return{index:closestPointIndex,distance:minDistance}; }
-        function perpendicularDistance(point, lineStart, lineEnd) { const[px,py]=[point[1],point[0]];const[x1,y1]=[lineStart[1],lineStart[0]];const[x2,y2]=[lineEnd[1],lineEnd[0]];const dx=x2-x1,dy=y2-y1;const lenSq=dx*dx+dy*dy;if(lenSq===0)return calculateDistance(point,lineStart);let t=((px-x1)*dx+(py-y1)*dy)/lenSq;t=Math.max(0,Math.min(1,t));const closestPoint=[y1+t*dy,x1+t*dx];return calculateDistance(point,closestPoint); }
-
+        
         // --- GESTION DES FICHIERS KMZ/KML ---
         function downloadKmz() {
             if (recordedPath.length < 2) {
@@ -623,16 +660,26 @@
                 return (isNaN(lat) || isNaN(lon)) ? null : [lat, lon];
             }).filter(Boolean);
             
-            if (points.length > 0) startNavigation(points);
-            else showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
+            if (points.length > 0) {
+                 // On considère le parcours chargé comme un "parcours enregistré"
+                recordedPath = points;
+                if(recordedPolyline) map.removeLayer(recordedPolyline);
+                recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
+                map.fitBounds(recordedPolyline.getBounds());
+                updateUIState();
+                startNavigation(points);
+            } else {
+                showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
+            }
         }
         
         // --- ÉCOUTEURS D'ÉVÉNEMENTS ---
         startBtn.addEventListener('click', () => { isRecording = true; recordedPath = []; if (recordedPolyline) map.removeLayer(recordedPolyline); recordedPolyline = null; updateUIState(); });
         stopBtn.addEventListener('click', () => { isRecording = false; updateUIState(); });
         drawBtn.addEventListener('click', startDrawing);
-        confirmDrawBtn.addEventListener('click', () => stopDrawing(true));
-        cancelDrawBtn.addEventListener('click', () => stopDrawing(false));
+        editBtn.addEventListener('click', startEditing); // Nouveau
+        confirmDrawBtn.addEventListener('click', () => exitDrawOrEditMode(true));
+        cancelDrawBtn.addEventListener('click', () => exitDrawOrEditMode(false));
         downloadBtn.addEventListener('click', downloadKmz);
         loadInput.addEventListener('change', loadFile);
         orientationMsg.addEventListener('click', requestOrientationPermission);
