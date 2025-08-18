@@ -10,7 +10,7 @@
     
     <!-- Leaflet.js pour la carte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY" crossorigin=""/>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo" crossorigin=""></script>
     
     <!-- JSZip.js pour créer les fichiers .kmz -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -61,6 +61,7 @@
             opacity: 0.7;
         }
         #notification-banner { z-index: 1000; }
+        #progress-bar { transition: width 0.5s ease-in-out; }
     </style>
 </head>
 <body class="bg-gray-100 font-sans p-4 md:p-6">
@@ -77,7 +78,10 @@
         </div>
         
         <!-- Message d'état de la géolocalisation -->
-        <div id="geolocation-status" class="hidden text-center bg-yellow-100 text-yellow-800 p-3 rounded-lg text-sm mt-4"></div>
+        <div id="geolocation-status" class="hidden flex items-center justify-center gap-3 text-center bg-yellow-100 text-yellow-800 p-3 rounded-lg text-sm mt-4">
+            <i data-lucide="alert-triangle" class="h-5 w-5 flex-shrink-0"></i>
+            <span id="geolocation-status-message"></span>
+        </div>
 
         <!-- Section Boussole et Statut -->
         <div id="navigation-section" class="flex flex-col md:flex-row items-center justify-around gap-6 hidden">
@@ -88,10 +92,18 @@
                 <div class="compass-direction" id="east">E</div>
                 <div class="compass-direction" id="west">O</div>
             </div>
-            <div id="status-info" class="text-center bg-gray-50 p-4 rounded-lg shadow-inner">
+            <div id="status-info" class="text-center bg-gray-50 p-4 rounded-lg shadow-inner flex-grow">
                 <h3 class="font-semibold text-lg text-gray-700">Navigation en cours</h3>
                 <p id="status-message" class="text-blue-600 mt-1">Suivez la flèche rouge</p>
-                <p id="distance-info" class="text-sm text-gray-500 mt-2"></p>
+                <div class="mt-2 space-y-1">
+                    <p id="next-waypoint-distance-info" class="text-sm text-gray-600"></p>
+                    <p id="total-distance-info" class="text-md font-bold text-gray-800"></p>
+                    <!-- Barre de progression et pourcentage -->
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                        <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <p id="completion-percentage" class="text-sm text-gray-500 text-center"></p>
+                </div>
             </div>
         </div>
 
@@ -162,6 +174,7 @@
         let recordedPolyline;
         let navigationPath = [];
         let navigationPolyline;
+        let totalNavigationDistance = 0;
         let watchId;
         
         // États de l'application
@@ -187,13 +200,16 @@
         const mainControls = document.getElementById('main-controls');
         const drawControls = document.getElementById('draw-controls');
         const mapElement = document.getElementById('map');
-        const mapSection = document.getElementById('map-section');
         const geolocationStatusDiv = document.getElementById('geolocation-status');
+        const geolocationStatusMessage = document.getElementById('geolocation-status-message');
         
         const compassArrow = document.getElementById('compass-arrow');
         const navigationSection = document.getElementById('navigation-section');
         const statusMessage = document.getElementById('status-message');
-        const distanceInfo = document.getElementById('distance-info');
+        const nextWaypointDistanceInfo = document.getElementById('next-waypoint-distance-info');
+        const totalDistanceInfo = document.getElementById('total-distance-info');
+        const progressBar = document.getElementById('progress-bar');
+        const completionPercentage = document.getElementById('completion-percentage');
         const orientationMsg = document.getElementById('orientation-permission-msg');
         
         const notificationBanner = document.getElementById('notification-banner');
@@ -287,15 +303,10 @@
         }
         
         function handlePositionError(error) {
-            // NOTE: L'erreur "Geolocation has been disabled in this document by permissions policy"
-            // est une restriction de sécurité de l'environnement (ex: iframe) et ne peut pas être "corrigée"
-            // dans le code. La logique ci-dessous gère ce cas en désactivant les fonctionnalités dépendantes
-            // du GPS tout en laissant le reste de l'application utilisable.
             console.error(`Erreur de géolocalisation: ${error.message}`);
-            
-            geolocationStatusDiv.textContent = "Géolocalisation non disponible. L'enregistrement GPS est désactivé, mais les autres fonctions (créer, charger, exporter) restent actives.";
+            geolocationStatusMessage.textContent = "Géolocalisation bloquée par le navigateur. L'enregistrement GPS et la navigation en direct sont désactivés. Les autres fonctions restent disponibles.";
             geolocationStatusDiv.classList.remove('hidden');
-            
+            lucide.createIcons(); // Re-render icons after adding one dynamically
             geolocationAvailable = false;
             updateUIState();
         }
@@ -304,10 +315,8 @@
         function startDrawing() {
             isDrawing = true;
             recordedPath = [];
-            if (recordedPolyline) {
-                map.removeLayer(recordedPolyline);
-                recordedPolyline = null;
-            }
+            if (recordedPolyline) map.removeLayer(recordedPolyline);
+            recordedPolyline = null;
             updateUIState();
         }
 
@@ -347,6 +356,12 @@
             }
             isNavigating = true;
             navigationPath = path;
+
+            totalNavigationDistance = 0;
+            for (let i = 0; i < navigationPath.length - 1; i++) {
+                totalNavigationDistance += calculateDistance(navigationPath[i], navigationPath[i + 1]);
+            }
+
             if (navigationPolyline) map.removeLayer(navigationPolyline);
             navigationPolyline = L.polyline(navigationPath, { color: 'purple', weight: 5, opacity: 0.8 }).addTo(map);
             map.fitBounds(navigationPolyline.getBounds());
@@ -363,10 +378,16 @@
         function stopNavigation() {
             isNavigating = false;
             navigationPath = [];
+            totalNavigationDistance = 0;
             navigationSection.classList.add('hidden');
             orientationMsg.classList.add('hidden');
             if(navigationPolyline) map.removeLayer(navigationPolyline);
             navigationPolyline = null;
+            
+            nextWaypointDistanceInfo.textContent = "";
+            totalDistanceInfo.textContent = "";
+            progressBar.style.width = '0%';
+            completionPercentage.textContent = "";
             updateUIState();
         }
         
@@ -374,17 +395,41 @@
             if (navigationPath.length === 0 || !isNavigating) return;
             let closestPointInfo = findClosestPointOnPath(currentLatLng, navigationPath);
             if (!closestPointInfo) return;
+
             let targetPointIndex = closestPointInfo.index + 1;
             if (targetPointIndex >= navigationPath.length) targetPointIndex = navigationPath.length - 1;
+            
             const targetLatLng = navigationPath[targetPointIndex];
             const bearing = calculateBearing(currentLatLng, targetLatLng);
-            const distanceToTarget = calculateDistance(currentLatLng, targetLatLng);
-            distanceInfo.textContent = `Distance au prochain point: ${distanceToTarget.toFixed(0)} m`;
             compassArrow.dataset.targetBearing = bearing;
-            const distanceToEnd = calculateDistance(currentLatLng, navigationPath[navigationPath.length - 1]);
-            if (distanceToEnd < 20) {
+
+            const distanceToNextWaypoint = calculateDistance(currentLatLng, targetLatLng);
+            nextWaypointDistanceInfo.textContent = `Prochain point : ${distanceToNextWaypoint.toFixed(0)} m`;
+
+            let remainingPathDistance = 0;
+            for (let i = closestPointInfo.index + 1; i < navigationPath.length - 1; i++) {
+                remainingPathDistance += calculateDistance(navigationPath[i], navigationPath[i + 1]);
+            }
+            const totalRemainingDistance = calculateDistance(currentLatLng, navigationPath[closestPointInfo.index + 1]) + remainingPathDistance;
+
+            if (totalRemainingDistance > 1000) {
+                totalDistanceInfo.textContent = `Restant : ${(totalRemainingDistance / 1000).toFixed(2)} km`;
+            } else {
+                totalDistanceInfo.textContent = `Restant : ${totalRemainingDistance.toFixed(0)} m`;
+            }
+
+            if (totalNavigationDistance > 0) {
+                const completedDistance = totalNavigationDistance - totalRemainingDistance;
+                const percentage = Math.min(100, Math.max(0, (completedDistance / totalNavigationDistance) * 100));
+                progressBar.style.width = `${percentage}%`;
+                completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
+            }
+
+            if (distanceToNextWaypoint < 20 && targetPointIndex === navigationPath.length - 1) {
                 statusMessage.textContent = "Vous êtes arrivé à destination !";
-                stopNavigation();
+                progressBar.style.width = '100%';
+                completionPercentage.textContent = `100 % complété`;
+                setTimeout(stopNavigation, 3000);
             }
         }
 
@@ -422,6 +467,7 @@
         function perpendicularDistance(point, lineStart, lineEnd) { const[px,py]=[point[1],point[0]];const[x1,y1]=[lineStart[1],lineStart[0]];const[x2,y2]=[lineEnd[1],lineEnd[0]];const dx=x2-x1,dy=y2-y1;const lenSq=dx*dx+dy*dy;if(lenSq===0)return calculateDistance(point,lineStart);let t=((px-x1)*dx+(py-y1)*dy)/lenSq;t=Math.max(0,Math.min(1,t));const closestPoint=[y1+t*dy,x1+t*dx];return calculateDistance(point,closestPoint); }
 
         // --- GESTION DES FICHIERS KMZ/KML ---
+        // MODIFICATION: Correction du téléchargement pour éviter le .kmz.zip
         function downloadKmz() {
             if (recordedPath.length < 2) {
                 showNotification("Le parcours est trop court pour être exporté.", 3000, true);
@@ -431,11 +477,19 @@
             const kmlContent = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Mon Parcours</name><Placemark><name>Parcours</name><LineString><coordinates>${coordinates}</coordinates></LineString></Placemark></Document></kml>`;
             const zip = new JSZip();
             zip.file("doc.kml", kmlContent);
-            zip.generateAsync({ type: "blob" }).then(content => {
+            zip.generateAsync({
+                type: "blob",
+                mimeType: "application/vnd.google-earth.kmz" // Spécifie le type de fichier correct
+            }).then(content => {
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(content);
                 link.download = `parcours_${Date.now()}.kmz`;
+                
+                // Logique de téléchargement robuste pour tous les navigateurs
+                document.body.appendChild(link);
                 link.click();
+                document.body.removeChild(link);
+
                 URL.revokeObjectURL(link.href);
             });
         }
