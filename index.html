@@ -225,7 +225,6 @@
         const orientationMsg = document.getElementById('orientation-permission-msg');
         const prevWaypointBtn = document.getElementById('prev-waypoint-btn');
         const nextWaypointBtn = document.getElementById('next-waypoint-btn');
-        // MODIFICATION: Récupération du nouveau bouton
         const stopNavigateBtn = document.getElementById('stop-navigate-btn');
         
         const notificationBanner = document.getElementById('notification-banner');
@@ -354,18 +353,23 @@
             updateUIState();
         }
 
-        // MODIFICATION: Nouvelle fonction pour gérer la fin du glissement d'un marqueur
-        function onMarkerDragEnd() {
-            // Mettre à jour le tableau de coordonnées depuis les positions des marqueurs
-            drawnPath = drawnMarkers.map(m => [m.getLatLng().lat, m.getLatLng().lng]);
+        // MODIFICATION: Remplacement de la fonction pour une mise à jour en temps réel
+        function onMarkerDrag(e) {
+            const draggedMarker = e.target;
+            const index = drawnMarkers.indexOf(draggedMarker);
             
-            // Redessiner la polyligne
-            if (drawnPolyline) {
-                drawnPolyline.setLatLngs(drawnPath);
+            if (index > -1) {
+                // Mettre à jour notre tableau de données avec les nouvelles coordonnées
+                drawnPath[index] = [draggedMarker.getLatLng().lat, draggedMarker.getLatLng().lng];
+                
+                // Redessiner la polyligne avec le tracé mis à jour
+                if (drawnPolyline) {
+                    drawnPolyline.setLatLngs(drawnPath);
+                }
+                
+                // Mettre à jour les informations de distance affichées
+                updateDrawingInfo();
             }
-            
-            // Mettre à jour les informations de distance
-            updateDrawingInfo();
         }
 
         function onMapClick(e) {
@@ -373,7 +377,7 @@
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
 
-            // MODIFICATION: Ajout de draggable: true et de l'événement 'dragend'
+            // MODIFICATION: L'événement est maintenant 'drag' et appelle onMarkerDrag
             const marker = L.circleMarker(latLng, { 
                 radius: 6, 
                 color: 'orange', 
@@ -383,7 +387,7 @@
             }).addTo(map);
 
             marker.on('contextmenu', deleteDrawnPoint);
-            marker.on('dragend', onMarkerDragEnd);
+            marker.on('drag', onMarkerDrag); // L'événement 'drag' permet une mise à jour en direct
             drawnMarkers.push(marker);
 
             if (!drawnPolyline) {
@@ -427,13 +431,13 @@
 
         // --- LOGIQUE DE NAVIGATION ET BOUSSOLE ---
         function startNavigation(path) {
-            if (path.length < 1) { // A single point is also valid for navigation (go to point)
+            if (path.length < 1) { 
                 showNotification("Le parcours est trop court pour démarrer la navigation.", 3000, true);
                 return;
             }
             isNavigating = true;
             navigationPath = path;
-            currentTargetIndex = path.length > 1 ? 1 : 0; // If only one point, target is the point itself
+            currentTargetIndex = path.length > 1 ? 1 : 0;
 
             totalNavigationDistance = 0;
             for (let i = 0; i < navigationPath.length - 1; i++) {
@@ -522,7 +526,6 @@
                 totalDistanceInfo.textContent = `Distance totale : ${formatDistance(totalNavigationDistance)}`;
             }
             
-            // Handle single-point navigation buttons state
             const isSinglePoint = navigationPath.length === 1;
             prevWaypointBtn.disabled = isSinglePoint || currentTargetIndex <= 0;
             nextWaypointBtn.disabled = isSinglePoint || currentTargetIndex >= navigationPath.length - 1;
@@ -539,7 +542,6 @@
             nextWaypointDistanceInfo.textContent = `Point ${currentTargetIndex + 1} : ${formatDistance(distanceToNextWaypoint)}`;
 
             let remainingPathDistance = 0;
-            // Start from the current target index if it's not the first point.
             for (let i = currentTargetIndex; i < navigationPath.length - 1; i++) {
                 remainingPathDistance += calculateDistance(navigationPath[i], navigationPath[i + 1]);
             }
@@ -585,7 +587,6 @@
                         }
                     }).catch(console.error);
             } else {
-                // For non-iOS 13+ browsers
                 if ('ondeviceorientationabsolute' in window) {
                      window.addEventListener('deviceorientationabsolute', handleOrientation, true);
                 } else if ('ondeviceorientation' in window) {
@@ -706,7 +707,6 @@
             }
         });
 
-        // MODIFICATION: Ajout de l'écouteur pour le nouveau bouton
         stopNavigateBtn.addEventListener('click', stopNavigation);
 
         const editBtn = document.getElementById('edit-path-btn');
@@ -716,7 +716,7 @@
                 if (drawnPolyline) map.removeLayer(drawnPolyline);
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5,10' }).addTo(map);
                 
-                // MODIFICATION: Ajout de draggable: true et de l'événement 'dragend' aux marqueurs existants
+                // MODIFICATION: L'événement est maintenant 'drag' et appelle onMarkerDrag
                 drawnMarkers = drawnPath.map(p => {
                     const m = L.circleMarker(p, { 
                         radius: 6, 
@@ -726,7 +726,7 @@
                         draggable: true
                     }).addTo(map);
                     m.on('contextmenu', deleteDrawnPoint);
-                    m.on('dragend', onMarkerDragEnd);
+                    m.on('drag', onMarkerDrag); // L'événement 'drag' permet une mise à jour en direct
                     return m;
                 });
                 startDrawing();
