@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Géo-Navigation KMZ</title>
+    
+    <!-- Tailwind CSS pour le style -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet.js pour la carte -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- JSZip.js pour créer les fichiers .kmz -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Lucide Icons pour les icônes -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Style pour la carte et la boussole */
+        #map { height: 400px; border-radius: 0.5rem; cursor: default; }
+        #map.drawing-mode { cursor: crosshair; }
+        .compass-container {
+            width: 150px;
+            height: 150px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: 2px solid #333;
+        }
+        .compass-arrow {
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 70px solid #ef4444; /* red-500 */
+            position: absolute;
+            top: 5px;
+            transform-origin: 50% 100%;
+            transition: transform 0.2s linear;
+        }
+        .compass-direction {
+            position: absolute;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        #north { top: 5px; }
+        #south { bottom: 5px; }
+        #east { right: 10px; }
+        #west { left: 10px; }
+        /* Style amélioré pour les boutons désactivés */
+        button:disabled, .disabled-button {
+            background-color: #9ca3af !important; /* gray-400 */
+            cursor: not-allowed !important;
+            opacity: 0.7;
+        }
+        #notification-banner { z-index: 1000; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans p-4 md:p-6">
+
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
+        <header class="text-center">
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ</h1>
+            <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
+        </header>
+
+        <!-- Section Carte -->
+        <div id="map-section">
+            <div id="map" class="w-full z-0"></div>
+        </div>
+        
+        <!-- Message d'état de la géolocalisation -->
+        <div id="geolocation-status" class="hidden text-center bg-yellow-100 text-yellow-800 p-3 rounded-lg text-sm mt-4"></div>
+
+        <!-- Section Boussole et Statut -->
+        <div id="navigation-section" class="flex flex-col md:flex-row items-center justify-around gap-6 hidden">
+            <div class="compass-container">
+                <div id="compass-arrow" class="compass-arrow"></div>
+                <div class="compass-direction" id="north">N</div>
+                <div class="compass-direction" id="south">S</div>
+                <div class="compass-direction" id="east">E</div>
+                <div class="compass-direction" id="west">O</div>
+            </div>
+            <div id="status-info" class="text-center bg-gray-50 p-4 rounded-lg shadow-inner">
+                <h3 class="font-semibold text-lg text-gray-700">Navigation en cours</h3>
+                <p id="status-message" class="text-blue-600 mt-1">Suivez la flèche rouge</p>
+                <p id="distance-info" class="text-sm text-gray-500 mt-2"></p>
+            </div>
+        </div>
+
+        <!-- Section Contrôles Principaux -->
+        <div id="main-controls" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <button id="start-record-btn" class="flex items-center justify-center gap-2 bg-green-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-green-600 transition-colors duration-200">
+                <i data-lucide="play-circle"></i>
+                <span>Démarrer</span>
+            </button>
+            <button id="stop-record-btn" class="flex items-center justify-center gap-2 bg-red-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-red-600 transition-colors duration-200" disabled>
+                <i data-lucide="stop-circle"></i>
+                <span>Arrêter</span>
+            </button>
+            <button id="draw-path-btn" class="flex items-center justify-center gap-2 bg-yellow-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-yellow-600 transition-colors duration-200">
+                <i data-lucide="mouse-pointer-2"></i>
+                <span>Créer Parcours</span>
+            </button>
+            <label for="load-kmz-input" class="flex items-center justify-center gap-2 bg-purple-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-purple-600 transition-colors duration-200 cursor-pointer">
+                <i data-lucide="upload"></i>
+                <span>Charger KMZ</span>
+                <input type="file" id="load-kmz-input" class="hidden" accept=".kmz,.kml">
+            </label>
+        </div>
+        
+        <!-- Section Contrôles de Dessin -->
+        <div id="draw-controls" class="hidden">
+            <p class="text-center text-blue-600 font-semibold mb-2">Mode création : cliquez sur la carte pour ajouter des points.</p>
+            <div class="flex justify-center gap-4">
+                 <button id="confirm-draw-btn" class="flex items-center justify-center gap-2 bg-green-500 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-green-600 transition-colors duration-200">
+                    <i data-lucide="check-circle"></i>
+                    <span>Valider</span>
+                </button>
+                <button id="cancel-draw-btn" class="flex items-center justify-center gap-2 bg-red-500 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-red-600 transition-colors duration-200">
+                    <i data-lucide="x-circle"></i>
+                    <span>Annuler</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Section Export -->
+        <div class="text-center">
+             <button id="download-kmz-btn" class="w-full md:w-1/2 mx-auto flex items-center justify-center gap-2 bg-blue-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-blue-600 transition-colors duration-200" disabled>
+                <i data-lucide="download"></i>
+                <span>Exporter le Parcours Actuel</span>
+            </button>
+        </div>
+        
+        <!-- Message d'information pour la boussole -->
+        <div id="orientation-permission-msg" class="hidden bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded-r-lg" role="alert">
+            <p class="font-bold">Action requise</p>
+            <p>Cliquez ici pour activer la boussole. Votre navigateur va demander l'accès aux capteurs de mouvement.</p>
+        </div>
+    </div>
+
+    <!-- Bannière de notification -->
+    <div id="notification-banner" class="hidden fixed top-5 right-5 bg-gray-800 text-white py-3 px-5 rounded-lg shadow-lg transition-all duration-300 opacity-0">
+        <p id="notification-message"></p>
+    </div>
+
+    <script>
+        // Remplacement des icônes Lucide
+        lucide.createIcons();
+
+        // Variables globales
+        let map;
+        let userMarker;
+        let recordedPath = [];
+        let recordedPolyline;
+        let navigationPath = [];
+        let navigationPolyline;
+        let watchId;
+        
+        // États de l'application
+        let isRecording = false;
+        let isNavigating = false;
+        let isDrawing = false;
+        let geolocationAvailable = true;
+        
+        // Variables pour le mode dessin
+        let drawnPath = [];
+        let drawnPolyline;
+        let drawnMarkers = [];
+
+        // Éléments du DOM
+        const startBtn = document.getElementById('start-record-btn');
+        const stopBtn = document.getElementById('stop-record-btn');
+        const downloadBtn = document.getElementById('download-kmz-btn');
+        const loadInput = document.getElementById('load-kmz-input');
+        const drawBtn = document.getElementById('draw-path-btn');
+        const confirmDrawBtn = document.getElementById('confirm-draw-btn');
+        const cancelDrawBtn = document.getElementById('cancel-draw-btn');
+        
+        const mainControls = document.getElementById('main-controls');
+        const drawControls = document.getElementById('draw-controls');
+        const mapElement = document.getElementById('map');
+        const mapSection = document.getElementById('map-section');
+        const geolocationStatusDiv = document.getElementById('geolocation-status');
+        
+        const compassArrow = document.getElementById('compass-arrow');
+        const navigationSection = document.getElementById('navigation-section');
+        const statusMessage = document.getElementById('status-message');
+        const distanceInfo = document.getElementById('distance-info');
+        const orientationMsg = document.getElementById('orientation-permission-msg');
+        
+        const notificationBanner = document.getElementById('notification-banner');
+        const notificationMessage = document.getElementById('notification-message');
+        let notificationTimeout;
+
+        // --- SYSTÈME DE NOTIFICATION ---
+        function showNotification(message, duration = 3000, isError = false) {
+            notificationMessage.textContent = message;
+            notificationBanner.classList.remove('bg-red-500', 'bg-gray-800');
+            notificationBanner.classList.add(isError ? 'bg-red-500' : 'bg-gray-800');
+            notificationBanner.classList.remove('hidden', 'opacity-0');
+
+            clearTimeout(notificationTimeout);
+            notificationTimeout = setTimeout(() => {
+                notificationBanner.classList.add('opacity-0');
+                setTimeout(() => notificationBanner.classList.add('hidden'), 300);
+            }, duration);
+        }
+
+        // --- INITIALISATION ---
+        function initMap() {
+            map = L.map('map').setView([48.8566, 2.3522], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            map.on('click', onMapClick);
+        }
+
+        function updateUIState() {
+            const hasPath = recordedPath.length > 0;
+            const isBusy = isRecording || isNavigating || isDrawing;
+            
+            startBtn.disabled = isBusy || !geolocationAvailable;
+            if (!geolocationAvailable) {
+                startBtn.title = "La géolocalisation n'est pas disponible ou autorisée.";
+            }
+            
+            stopBtn.disabled = !isRecording;
+            drawBtn.disabled = isBusy;
+            loadInput.disabled = isBusy;
+            loadInput.parentElement.classList.toggle('disabled-button', isBusy);
+            downloadBtn.disabled = !hasPath || isBusy;
+
+            if (isDrawing) {
+                mainControls.classList.add('hidden');
+                drawControls.classList.remove('hidden');
+                mapElement.classList.add('drawing-mode');
+            } else {
+                mainControls.classList.remove('hidden');
+                drawControls.classList.add('hidden');
+                mapElement.classList.remove('drawing-mode');
+            }
+        }
+
+        // --- GESTION DE LA GÉOLOCALISATION ---
+        function startGeolocation() {
+            if (!navigator.geolocation) {
+                handlePositionError({ message: "La géolocalisation n'est pas supportée par ce navigateur." });
+                return;
+            }
+            const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+            watchId = navigator.geolocation.watchPosition(handlePositionUpdate, handlePositionError, options);
+        }
+        
+        function handlePositionUpdate(position) {
+            const { latitude, longitude, accuracy } = position.coords;
+            const latLng = [latitude, longitude];
+
+            if (!userMarker) {
+                map.setView(latLng, 16);
+                userMarker = L.circle(latLng, {
+                    radius: accuracy, color: '#1d4ed8', fillColor: '#3b82f6', fillOpacity: 0.5
+                }).addTo(map);
+            } else {
+                userMarker.setLatLng(latLng).setRadius(accuracy);
+            }
+
+            if (isRecording) {
+                recordedPath.push(latLng);
+                if (!recordedPolyline) {
+                    recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
+                } else {
+                    recordedPolyline.addLatLng(latLng);
+                }
+            }
+            
+            if (isNavigating) {
+                updateNavigation(latLng);
+            }
+        }
+        
+        function handlePositionError(error) {
+            // NOTE: L'erreur "Geolocation has been disabled in this document by permissions policy"
+            // est une restriction de sécurité de l'environnement (ex: iframe) et ne peut pas être "corrigée"
+            // dans le code. La logique ci-dessous gère ce cas en désactivant les fonctionnalités dépendantes
+            // du GPS tout en laissant le reste de l'application utilisable.
+            console.error(`Erreur de géolocalisation: ${error.message}`);
+            
+            geolocationStatusDiv.textContent = "Géolocalisation non disponible. L'enregistrement GPS est désactivé, mais les autres fonctions (créer, charger, exporter) restent actives.";
+            geolocationStatusDiv.classList.remove('hidden');
+            
+            geolocationAvailable = false;
+            updateUIState();
+        }
+
+        // --- LOGIQUE DE DESSIN SUR LA CARTE ---
+        function startDrawing() {
+            isDrawing = true;
+            recordedPath = [];
+            if (recordedPolyline) {
+                map.removeLayer(recordedPolyline);
+                recordedPolyline = null;
+            }
+            updateUIState();
+        }
+
+        function stopDrawing(savePath) {
+            if (savePath && drawnPath.length > 0) {
+                recordedPath = [...drawnPath];
+                if (recordedPolyline) map.removeLayer(recordedPolyline);
+                recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
+            }
+            if (drawnPolyline) map.removeLayer(drawnPolyline);
+            drawnMarkers.forEach(marker => map.removeLayer(marker));
+            drawnPath = [];
+            drawnPolyline = null;
+            drawnMarkers = [];
+            isDrawing = false;
+            updateUIState();
+        }
+
+        function onMapClick(e) {
+            if (!isDrawing) return;
+            const latLng = [e.latlng.lat, e.latlng.lng];
+            drawnPath.push(latLng);
+            const marker = L.circleMarker(latLng, { radius: 6, color: 'orange', fillColor: '#f97316', fillOpacity: 1 }).addTo(map);
+            drawnMarkers.push(marker);
+            if (!drawnPolyline) {
+                drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
+            } else {
+                drawnPolyline.addLatLng(latLng);
+            }
+        }
+
+        // --- LOGIQUE DE NAVIGATION ET BOUSSOLE ---
+        function startNavigation(path) {
+            if (path.length < 2) {
+                showNotification("Le parcours est trop court pour démarrer la navigation.", 3000, true);
+                return;
+            }
+            isNavigating = true;
+            navigationPath = path;
+            if (navigationPolyline) map.removeLayer(navigationPolyline);
+            navigationPolyline = L.polyline(navigationPath, { color: 'purple', weight: 5, opacity: 0.8 }).addTo(map);
+            map.fitBounds(navigationPolyline.getBounds());
+
+            if (geolocationAvailable) {
+                navigationSection.classList.remove('hidden');
+                orientationMsg.classList.remove('hidden');
+            } else {
+                showNotification("Navigation démarrée. Le suivi en direct nécessite la géolocalisation.", 4000);
+            }
+            updateUIState();
+        }
+        
+        function stopNavigation() {
+            isNavigating = false;
+            navigationPath = [];
+            navigationSection.classList.add('hidden');
+            orientationMsg.classList.add('hidden');
+            if(navigationPolyline) map.removeLayer(navigationPolyline);
+            navigationPolyline = null;
+            updateUIState();
+        }
+        
+        function updateNavigation(currentLatLng) {
+            if (navigationPath.length === 0 || !isNavigating) return;
+            let closestPointInfo = findClosestPointOnPath(currentLatLng, navigationPath);
+            if (!closestPointInfo) return;
+            let targetPointIndex = closestPointInfo.index + 1;
+            if (targetPointIndex >= navigationPath.length) targetPointIndex = navigationPath.length - 1;
+            const targetLatLng = navigationPath[targetPointIndex];
+            const bearing = calculateBearing(currentLatLng, targetLatLng);
+            const distanceToTarget = calculateDistance(currentLatLng, targetLatLng);
+            distanceInfo.textContent = `Distance au prochain point: ${distanceToTarget.toFixed(0)} m`;
+            compassArrow.dataset.targetBearing = bearing;
+            const distanceToEnd = calculateDistance(currentLatLng, navigationPath[navigationPath.length - 1]);
+            if (distanceToEnd < 20) {
+                statusMessage.textContent = "Vous êtes arrivé à destination !";
+                stopNavigation();
+            }
+        }
+
+        function handleOrientation(event) {
+            let heading = event.webkitCompassHeading || event.alpha;
+            if (heading === null || !isNavigating) return;
+            const targetBearing = parseFloat(compassArrow.dataset.targetBearing) || 0;
+            const arrowRotation = targetBearing - heading;
+            compassArrow.style.transform = `rotate(${arrowRotation}deg)`;
+        }
+
+        function requestOrientationPermission() {
+             if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                            orientationMsg.classList.add('hidden');
+                        } else {
+                             showNotification("Permission refusée. La boussole ne fonctionnera pas.", 3000, true);
+                        }
+                    }).catch(console.error);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation);
+                orientationMsg.classList.add('hidden');
+            }
+        }
+        
+        // --- CALCULS GÉODÉSIQUES ---
+        function toRad(deg) { return deg * Math.PI / 180; }
+        function toDeg(rad) { return rad * 180 / Math.PI; }
+        function calculateDistance(p1, p2) { const R=6371e3;const[lat1,lon1]=[toRad(p1[0]),toRad(p1[1])];const[lat2,lon2]=[toRad(p2[0]),toRad(p2[1])];const dLat=lat2-lat1,dLon=lon2-lon1;const a=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
+        function calculateBearing(p1, p2) { const[lat1,lon1]=[toRad(p1[0]),toRad(p1[1])];const[lat2,lon2]=[toRad(p2[0]),toRad(p2[1])];const y=Math.sin(lon2-lon1)*Math.cos(lat2);const x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(lon2-lon1);return(toDeg(Math.atan2(y,x))+360)%360; }
+        function findClosestPointOnPath(point, path) { let minDistance=Infinity,closestPointIndex=-1;for(let i=0;i<path.length-1;i++){const d=perpendicularDistance(point,path[i],path[i+1]);if(d<minDistance){minDistance=d;closestPointIndex=i;}} if(closestPointIndex===-1)return path.length>0?{index:0,distance:calculateDistance(point,path[0])}:null;return{index:closestPointIndex,distance:minDistance}; }
+        function perpendicularDistance(point, lineStart, lineEnd) { const[px,py]=[point[1],point[0]];const[x1,y1]=[lineStart[1],lineStart[0]];const[x2,y2]=[lineEnd[1],lineEnd[0]];const dx=x2-x1,dy=y2-y1;const lenSq=dx*dx+dy*dy;if(lenSq===0)return calculateDistance(point,lineStart);let t=((px-x1)*dx+(py-y1)*dy)/lenSq;t=Math.max(0,Math.min(1,t));const closestPoint=[y1+t*dy,x1+t*dx];return calculateDistance(point,closestPoint); }
+
+        // --- GESTION DES FICHIERS KMZ/KML ---
+        function downloadKmz() {
+            if (recordedPath.length < 2) {
+                showNotification("Le parcours est trop court pour être exporté.", 3000, true);
+                return;
+            }
+            const coordinates = recordedPath.map(p => `${p[1]},${p[0]},0`).join(' ');
+            const kmlContent = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Mon Parcours</name><Placemark><name>Parcours</name><LineString><coordinates>${coordinates}</coordinates></LineString></Placemark></Document></kml>`;
+            const zip = new JSZip();
+            zip.file("doc.kml", kmlContent);
+            zip.generateAsync({ type: "blob" }).then(content => {
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(content);
+                link.download = `parcours_${Date.now()}.kmz`;
+                link.click();
+                URL.revokeObjectURL(link.href);
+            });
+        }
+
+        function loadFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            if (file.name.endsWith('.kmz')) {
+                reader.onload = e => JSZip.loadAsync(e.target.result).then(zip => {
+                    const kmlFile = Object.keys(zip.files).find(name => name.endsWith('.kml'));
+                    if (kmlFile) zip.file(kmlFile).async("string").then(parseKml);
+                    else showNotification("Aucun fichier .kml trouvé dans l'archive .kmz.", 3000, true);
+                });
+                reader.readAsArrayBuffer(file);
+            } else if (file.name.endsWith('.kml')) {
+                reader.onload = e => parseKml(e.target.result);
+                reader.readAsText(file);
+            } else showNotification("Veuillez sélectionner un fichier .kmz ou .kml", 3000, true);
+            event.target.value = '';
+        }
+        
+        function parseKml(kmlString) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(kmlString, "text/xml");
+            const coordsElement = xmlDoc.getElementsByTagName('coordinates')[0];
+            if (!coordsElement) {
+                showNotification("Format KML invalide ou pas de coordonnées trouvées.", 3000, true);
+                return;
+            }
+            const points = coordsElement.textContent.trim().split(/\s+/).map(pointStr => {
+                const [lon, lat] = pointStr.split(',').map(parseFloat);
+                return (isNaN(lat) || isNaN(lon)) ? null : [lat, lon];
+            }).filter(Boolean);
+            
+            if (points.length > 0) startNavigation(points);
+            else showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
+        }
+        
+        // --- ÉCOUTEURS D'ÉVÉNEMENTS ---
+        startBtn.addEventListener('click', () => { isRecording = true; recordedPath = []; if (recordedPolyline) map.removeLayer(recordedPolyline); recordedPolyline = null; updateUIState(); });
+        stopBtn.addEventListener('click', () => { isRecording = false; updateUIState(); });
+        drawBtn.addEventListener('click', startDrawing);
+        confirmDrawBtn.addEventListener('click', () => stopDrawing(true));
+        cancelDrawBtn.addEventListener('click', () => stopDrawing(false));
+        downloadBtn.addEventListener('click', downloadKmz);
+        loadInput.addEventListener('change', loadFile);
+        orientationMsg.addEventListener('click', requestOrientationPermission);
+
+        // Initialisation au chargement de la page
+        window.onload = () => {
+            initMap();
+            startGeolocation();
+            updateUIState();
+        };
+
+    </script>
+</body>
+</html>
