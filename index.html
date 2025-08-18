@@ -123,8 +123,9 @@
             </button>
             <label for="load-kmz-input" class="flex items-center justify-center gap-2 bg-purple-500 text-white font-semibold py-3 px-4 rounded-lg shadow-md hover:bg-purple-600 transition-colors duration-200 cursor-pointer">
                 <i data-lucide="upload"></i>
-                <span>Charger KMZ</span>
-                <input type="file" id="load-kmz-input" class="hidden" accept=".kmz,.kml">
+                <span>Charger Parcours</span>
+                <!-- MODIFICATION: Ajout de .zip à la liste des fichiers acceptés -->
+                <input type="file" id="load-kmz-input" class="hidden" accept=".kmz,.kml,.zip">
             </label>
         </div>
         
@@ -467,7 +468,6 @@
         function perpendicularDistance(point, lineStart, lineEnd) { const[px,py]=[point[1],point[0]];const[x1,y1]=[lineStart[1],lineStart[0]];const[x2,y2]=[lineEnd[1],lineEnd[0]];const dx=x2-x1,dy=y2-y1;const lenSq=dx*dx+dy*dy;if(lenSq===0)return calculateDistance(point,lineStart);let t=((px-x1)*dx+(py-y1)*dy)/lenSq;t=Math.max(0,Math.min(1,t));const closestPoint=[y1+t*dy,x1+t*dx];return calculateDistance(point,closestPoint); }
 
         // --- GESTION DES FICHIERS KMZ/KML ---
-        // MODIFICATION: Correction du téléchargement pour éviter le .kmz.zip
         function downloadKmz() {
             if (recordedPath.length < 2) {
                 showNotification("Le parcours est trop court pour être exporté.", 3000, true);
@@ -479,36 +479,36 @@
             zip.file("doc.kml", kmlContent);
             zip.generateAsync({
                 type: "blob",
-                mimeType: "application/vnd.google-earth.kmz" // Spécifie le type de fichier correct
+                mimeType: "application/vnd.google-earth.kmz"
             }).then(content => {
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(content);
                 link.download = `parcours_${Date.now()}.kmz`;
-                
-                // Logique de téléchargement robuste pour tous les navigateurs
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-
                 URL.revokeObjectURL(link.href);
             });
         }
 
+        // MODIFICATION: Logique de chargement mise à jour pour accepter .zip
         function loadFile(event) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            if (file.name.endsWith('.kmz')) {
+            if (file.name.endsWith('.kmz') || file.name.endsWith('.zip')) {
                 reader.onload = e => JSZip.loadAsync(e.target.result).then(zip => {
                     const kmlFile = Object.keys(zip.files).find(name => name.endsWith('.kml'));
                     if (kmlFile) zip.file(kmlFile).async("string").then(parseKml);
-                    else showNotification("Aucun fichier .kml trouvé dans l'archive .kmz.", 3000, true);
+                    else showNotification("Aucun fichier .kml trouvé dans l'archive.", 3000, true);
                 });
                 reader.readAsArrayBuffer(file);
             } else if (file.name.endsWith('.kml')) {
                 reader.onload = e => parseKml(e.target.result);
                 reader.readAsText(file);
-            } else showNotification("Veuillez sélectionner un fichier .kmz ou .kml", 3000, true);
+            } else {
+                showNotification("Veuillez sélectionner un fichier .kmz, .kml ou .zip", 3000, true);
+            }
             event.target.value = '';
         }
         
