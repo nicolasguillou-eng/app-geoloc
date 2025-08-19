@@ -192,10 +192,10 @@
         let isDrawing = false;
         let geolocationAvailable = true;
 
-        // NOUVEAU: Variables pour la direction de secours par GPS
+        // Variables pour la direction de secours par GPS
         let lastPositionForCourse = null;
-        let isOrientationSupported = false; // Sera vrai si les données du capteur sont reçues
-        let userCourse = 0; // Direction de déplacement de l'utilisateur (cap)
+        let isOrientationSupported = false;
+        let userCourse = 0;
         
         // Variables pour le mode dessin
         let drawnPath = [];
@@ -317,22 +317,18 @@
             }
             
             if (isNavigating) {
-                // MODIFICATION: Logique pour calculer la direction si la boussole est absente
                 if (!isOrientationSupported) {
                     if (lastPositionForCourse) {
                         const distanceMoved = calculateDistance(lastPositionForCourse, latLng);
-                        // On met à jour si le déplacement est significatif (plus de 5m) pour éviter les sauts
                         if (distanceMoved > 5) {
                             userCourse = calculateBearing(lastPositionForCourse, latLng);
                             updateCompass(userCourse);
                             lastPositionForCourse = latLng;
-                            // Mettre à jour le message si c'était le message d'attente
                             if(statusMessage.textContent.startsWith("Déplacez-vous")) {
                                 statusMessage.textContent = "Suivez la flèche rouge";
                             }
                         }
                     } else {
-                        // Premier point reçu depuis le début de la navigation
                         lastPositionForCourse = latLng;
                     }
                 }
@@ -394,7 +390,6 @@
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
 
-            // MODIFICATION 1: Remplacement de L.circleMarker par L.marker avec icône personnalisée
             const marker = L.marker(latLng, {
                 draggable: true,
                 icon: L.divIcon({
@@ -458,7 +453,6 @@
             navigationPath = path;
             currentTargetIndex = 0;
             
-            // MODIFICATION: Réinitialisation des variables de direction
             lastPositionForCourse = null;
             isOrientationSupported = false;
 
@@ -481,14 +475,13 @@
                 orientationMsg.classList.remove('hidden');
                 compassArrow.parentElement.classList.remove('hidden');
 
-                // MODIFICATION: Logique pour avertir l'utilisateur si la boussole n'est pas détectée
                 setTimeout(() => {
                     if (isNavigating && !isOrientationSupported) {
                         showNotification("Capteur magnétique absent. La direction sera basée sur vos déplacements.", 4000);
                         statusMessage.textContent = "Déplacez-vous pour trouver la direction";
-                        orientationMsg.classList.add('hidden'); // Cacher le bouton si le capteur est absent
+                        orientationMsg.classList.add('hidden');
                     }
-                }, 2000); // Attendre 2s pour voir si un événement 'deviceorientation' est reçu
+                }, 2000);
             } else {
                 orientationMsg.classList.add('hidden');
                 compassArrow.parentElement.classList.add('hidden');
@@ -514,7 +507,6 @@
                 targetMarker = null;
             }
             
-            // MODIFICATION: Réinitialisation des variables
             isOrientationSupported = false;
             lastPositionForCourse = null;
             
@@ -574,10 +566,7 @@
             const bearing = calculateBearing(currentLatLng, targetLatLng);
             compassArrow.dataset.targetBearing = bearing;
 
-            // NOUVEAU: Mettre à jour la boussole avec la direction de déplacement si le capteur est absent
-            if(isOrientationSupported){
-                 // La fonction handleOrientation s'en occupe déjà via l'event listener
-            } else {
+            if(!isOrientationSupported){
                  updateCompass(userCourse);
             }
 
@@ -610,20 +599,18 @@
             }
         }
         
-        // MODIFICATION: La fonction handleOrientation met à jour isOrientationSupported
         function handleOrientation(event) {
             let heading = event.webkitCompassHeading || event.alpha;
             if (typeof heading === 'number' && !isNaN(heading)) {
                 if (!isOrientationSupported) {
-                    isOrientationSupported = true; // On a reçu des données valides
+                    isOrientationSupported = true;
                     orientationMsg.classList.add('hidden');
                     statusMessage.textContent = "Suivez la flèche rouge";
                 }
-                updateCompass(heading); // Utilise la fonction centralisée
+                updateCompass(heading);
             }
         }
         
-        // MODIFICATION: La fonction de demande de permission met à jour l'état et informe l'utilisateur
         function requestOrientationPermission() {
              if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
@@ -643,13 +630,10 @@
                 } else if ('ondeviceorientation' in window) {
                     window.addEventListener('deviceorientation', handleOrientation, true);
                 }
-                // Pour les navigateurs non-iOS, on ne peut pas savoir si ça marche avant de recevoir un event
-                // On masque le message, car il n'y a pas d'action utilisateur à faire ici
                 orientationMsg.classList.add('hidden');
             }
         }
 
-        // NOUVEAU: Fonction centralisée pour mettre à jour l'orientation de la flèche
         function updateCompass(heading) {
             if (heading === null || !isNavigating) return;
             const targetBearing = parseFloat(compassArrow.dataset.targetBearing) || 0;
@@ -659,9 +643,7 @@
         
         // --- CALCULS GÉODÉSIQUES ET UTILITAIRES ---
         function formatDistance(distance) {
-            if (distance > 1000) {
-                return `${(distance / 1000).toFixed(2)} km`;
-            }
+            if (distance > 1000) return `${(distance / 1000).toFixed(2)} km`;
             return `${distance.toFixed(0)} m`;
         }
         function toRad(deg) { return deg * Math.PI / 180; }
@@ -686,10 +668,8 @@
             
             const zip = new JSZip();
             zip.file("doc.kml", kmlContent);
-            zip.generateAsync({
-                type: "blob",
-                mimeType: "application/vnd.google-earth.kmz"
-            }).then(content => {
+            zip.generateAsync({ type: "blob", mimeType: "application/vnd.google-earth.kmz" })
+            .then(content => {
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(content);
                 link.download = `parcours_${Date.now()}.kmz`;
@@ -734,12 +714,11 @@
             }).filter(Boolean);
             
             if (points.length > 0) {
-                // **MODIFICATION 1 : Sauvegarde dans le localStorage**
                 try {
                     localStorage.setItem('lastKmlContent', kmlString);
                 } catch (e) {
                     console.error("Erreur lors de la sauvegarde dans localStorage:", e);
-                    showNotification("Impossible de sauvegarder le parcours localement (stockage plein ?).", 4000, true);
+                    showNotification("Impossible de sauvegarder le parcours localement.", 4000, true);
                 }
 
                 recordedPath = points;
@@ -747,7 +726,7 @@
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
                 map.fitBounds(recordedPolyline.getBounds());
                 updateUIState();
-                // La notification a été déplacée au chargement de la page pour éviter les doublons
+                showNotification("Parcours chargé avec succès.", 3000);
             }
             else showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
         }
@@ -755,27 +734,15 @@
         // --- ÉCOUTEURS D'ÉVÉNEMENTS ---
         startBtn.addEventListener('click', () => { isRecording = true; recordedPath = []; if (recordedPolyline) map.removeLayer(recordedPolyline); recordedPolyline = null; updateUIState(); });
         stopBtn.addEventListener('click', () => { isRecording = false; updateUIState(); });
-        drawBtn.addEventListener('click', () => {
-             drawnPath = [];
-             startDrawing();
-        });
+        drawBtn.addEventListener('click', () => { drawnPath = []; startDrawing(); });
         confirmDrawBtn.addEventListener('click', () => stopDrawing(true));
         cancelDrawBtn.addEventListener('click', () => stopDrawing(false));
         downloadBtn.addEventListener('click', downloadKmz);
         loadInput.addEventListener('change', loadFile);
         orientationMsg.addEventListener('click', requestOrientationPermission);
         
-        prevWaypointBtn.addEventListener('click', () => {
-            if (isNavigating && currentTargetIndex > 0) {
-                updateTargetWaypoint(currentTargetIndex - 1);
-            }
-        });
-        nextWaypointBtn.addEventListener('click', () => {
-            if (isNavigating && currentTargetIndex < navigationPath.length - 1) {
-                updateTargetWaypoint(currentTargetIndex + 1);
-            }
-        });
-
+        prevWaypointBtn.addEventListener('click', () => { if (isNavigating && currentTargetIndex > 0) updateTargetWaypoint(currentTargetIndex - 1); });
+        nextWaypointBtn.addEventListener('click', () => { if (isNavigating && currentTargetIndex < navigationPath.length - 1) updateTargetWaypoint(currentTargetIndex + 1); });
         stopNavigateBtn.addEventListener('click', stopNavigation);
 
         const editBtn = document.getElementById('edit-path-btn');
@@ -786,7 +753,6 @@
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5,10' }).addTo(map);
                 
                 drawnMarkers = drawnPath.map(p => {
-                    // MODIFICATION 2: Remplacement de L.circleMarker par L.marker avec icône personnalisée
                     const m = L.marker(p, {
                         draggable: true,
                         icon: L.divIcon({
@@ -809,13 +775,9 @@
 
         const navigateBtn = document.getElementById('navigate-btn');
         navigateBtn.addEventListener('click', () => {
-            if (isNavigating) {
-                stopNavigation();
-            } else if (recordedPath.length > 0) {
-                startNavigation(recordedPath);
-            } else {
-                showNotification("Aucun parcours à suivre.", 3000, true);
-            }
+            if (isNavigating) stopNavigation();
+            else if (recordedPath.length > 0) startNavigation(recordedPath);
+            else showNotification("Aucun parcours à suivre.", 3000, true);
         });
 
         // Initialisation au chargement de la page
@@ -824,7 +786,6 @@
             startGeolocation();
             updateUIState();
 
-            // **MODIFICATION 2 : Chargement depuis le localStorage au démarrage**
             const savedKml = localStorage.getItem('lastKmlContent');
             if (savedKml) {
                 showNotification("Dernier parcours chargé depuis le stockage local.", 3000);
@@ -835,5 +796,3 @@
     </script>
 </body>
 </html>
-
-
