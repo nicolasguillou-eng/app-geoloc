@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.3</title>
+    <title>Géo-Navigation KMZ V1.5</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.3</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.5</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -191,6 +191,11 @@
         let isNavigating = false;
         let isDrawing = false;
         let geolocationAvailable = true;
+
+        // NOUVEAU: Variables pour la direction de secours par GPS
+        let lastPositionForCourse = null;
+        let isOrientationSupported = false; // Sera vrai si les données du capteur sont reçues
+        let userCourse = 0; // Direction de déplacement de l'utilisateur (cap)
         
         // Variables pour le mode dessin
         let drawnPath = [];
@@ -312,6 +317,25 @@
             }
             
             if (isNavigating) {
+                // MODIFICATION: Logique pour calculer la direction si la boussole est absente
+                if (!isOrientationSupported) {
+                    if (lastPositionForCourse) {
+                        const distanceMoved = calculateDistance(lastPositionForCourse, latLng);
+                        // On met à jour si le déplacement est significatif (plus de 5m) pour éviter les sauts
+                        if (distanceMoved > 5) {
+                            userCourse = calculateBearing(lastPositionForCourse, latLng);
+                            updateCompass(userCourse);
+                            lastPositionForCourse = latLng;
+                            // Mettre à jour le message si c'était le message d'attente
+                            if(statusMessage.textContent.startsWith("Déplacez-vous")) {
+                                statusMessage.textContent = "Suivez la flèche rouge";
+                            }
+                        }
+                    } else {
+                        // Premier point reçu depuis le début de la navigation
+                        lastPositionForCourse = latLng;
+                    }
+                }
                 updateNavigation(latLng);
             }
         }
@@ -380,15 +404,8 @@
 
             marker.on('contextmenu', deleteDrawnPoint);
             marker.on('drag', onMarkerDrag);
-
-            // MODIFICATION: Nouvelle logique pour gérer le conflit de déplacement
-            marker.on('mousedown', () => {
-                map.dragging.disable();
-            });
-            marker.on('mouseup', () => {
-                map.dragging.enable();
-            });
-
+            marker.on('mousedown', () => map.dragging.disable());
+            marker.on('mouseup', () => map.dragging.enable());
             drawnMarkers.push(marker);
 
             if (!drawnPolyline) {
@@ -437,6 +454,10 @@
             isNavigating = true;
             navigationPath = path;
             currentTargetIndex = 0;
+            
+            // MODIFICATION: Réinitialisation des variables de direction
+            lastPositionForCourse = null;
+            isOrientationSupported = false;
 
             totalNavigationDistance = 0;
             for (let i = 0; i < navigationPath.length - 1; i++) {
@@ -456,6 +477,15 @@
             if (geolocationAvailable) {
                 orientationMsg.classList.remove('hidden');
                 compassArrow.parentElement.classList.remove('hidden');
+
+                // MODIFICATION: Logique pour avertir l'utilisateur si la boussole n'est pas détectée
+                setTimeout(() => {
+                    if (isNavigating && !isOrientationSupported) {
+                        showNotification("Capteur magnétique absent. La direction sera basée sur vos déplacements.", 4000);
+                        statusMessage.textContent = "Déplacez-vous pour trouver la direction";
+                        orientationMsg.classList.add('hidden'); // Cacher le bouton si le capteur est absent
+                    }
+                }, 2000); // Attendre 2s pour voir si un événement 'deviceorientation' est reçu
             } else {
                 orientationMsg.classList.add('hidden');
                 compassArrow.parentElement.classList.add('hidden');
@@ -480,6 +510,10 @@
                 map.removeLayer(targetMarker);
                 targetMarker = null;
             }
+            
+            // MODIFICATION: Réinitialisation des variables
+            isOrientationSupported = false;
+            lastPositionForCourse = null;
             
             nextWaypointDistanceInfo.textContent = "";
             totalDistanceInfo.textContent = "";
@@ -537,6 +571,13 @@
             const bearing = calculateBearing(currentLatLng, targetLatLng);
             compassArrow.dataset.targetBearing = bearing;
 
+            // NOUVEAU: Mettre à jour la boussole avec la direction de déplacement si le capteur est absent
+            if(isOrientationSupported){
+                 // La fonction handleOrientation s'en occupe déjà via l'event listener
+            } else {
+                 updateCompass(userCourse);
+            }
+
             const distanceToNextWaypoint = calculateDistance(currentLatLng, targetLatLng);
             nextWaypointDistanceInfo.textContent = `Point ${currentTargetIndex + 1} : ${formatDistance(distanceToNextWaypoint)}`;
 
@@ -565,15 +606,21 @@
                 setTimeout(stopNavigation, 3000);
             }
         }
-
+        
+        // MODIFICATION: La fonction handleOrientation met à jour isOrientationSupported
         function handleOrientation(event) {
             let heading = event.webkitCompassHeading || event.alpha;
-            if (heading === null || !isNavigating) return;
-            const targetBearing = parseFloat(compassArrow.dataset.targetBearing) || 0;
-            const arrowRotation = targetBearing - heading;
-            compassArrow.style.transform = `rotate(${arrowRotation}deg)`;
+            if (typeof heading === 'number' && !isNaN(heading)) {
+                if (!isOrientationSupported) {
+                    isOrientationSupported = true; // On a reçu des données valides
+                    orientationMsg.classList.add('hidden');
+                    statusMessage.textContent = "Suivez la flèche rouge";
+                }
+                updateCompass(heading); // Utilise la fonction centralisée
+            }
         }
-
+        
+        // MODIFICATION: La fonction de demande de permission met à jour l'état et informe l'utilisateur
         function requestOrientationPermission() {
              if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                 DeviceOrientationEvent.requestPermission()
@@ -582,7 +629,9 @@
                             window.addEventListener('deviceorientationabsolute', handleOrientation, true);
                             orientationMsg.classList.add('hidden');
                         } else {
-                             showNotification("Permission refusée. La boussole ne fonctionnera pas.", 3000, true);
+                             isOrientationSupported = false;
+                             showNotification("Permission refusée. La direction sera calculée d'après vos déplacements.", 4000, true);
+                             orientationMsg.classList.add('hidden');
                         }
                     }).catch(console.error);
             } else {
@@ -591,8 +640,18 @@
                 } else if ('ondeviceorientation' in window) {
                     window.addEventListener('deviceorientation', handleOrientation, true);
                 }
+                // Pour les navigateurs non-iOS, on ne peut pas savoir si ça marche avant de recevoir un event
+                // On masque le message, car il n'y a pas d'action utilisateur à faire ici
                 orientationMsg.classList.add('hidden');
             }
+        }
+
+        // NOUVEAU: Fonction centralisée pour mettre à jour l'orientation de la flèche
+        function updateCompass(heading) {
+            if (heading === null || !isNavigating) return;
+            const targetBearing = parseFloat(compassArrow.dataset.targetBearing) || 0;
+            const arrowRotation = targetBearing - heading;
+            compassArrow.style.transform = `rotate(${arrowRotation}deg)`;
         }
         
         // --- CALCULS GÉODÉSIQUES ET UTILITAIRES ---
@@ -725,15 +784,8 @@
                     }).addTo(map);
                     m.on('contextmenu', deleteDrawnPoint);
                     m.on('drag', onMarkerDrag);
-
-                    // MODIFICATION: Nouvelle logique pour gérer le conflit de déplacement
-                    m.on('mousedown', () => {
-                        map.dragging.disable();
-                    });
-                    m.on('mouseup', () => {
-                        map.dragging.enable();
-                    });
-                    
+                    m.on('mousedown', () => map.dragging.disable());
+                    m.on('mouseup', () => map.dragging.enable());
                     return m;
                 });
                 startDrawing();
@@ -761,4 +813,3 @@
     </script>
 </body>
 </html>
-
