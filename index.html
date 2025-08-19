@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ ClaudV1.7</title>
+    <title>Géo-Navigation KMZ V1.9</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ ClaudV1.7</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.9</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -376,18 +376,6 @@
             updateUIState();
         }
 
-        function onMarkerDragStart(e) {
-            // Désactiver le déplacement de la carte quand on commence à déplacer un marqueur
-            map.dragging.disable();
-            map.doubleClickZoom.disable();
-        }
-
-        function onMarkerDragEnd(e) {
-            // Réactiver le déplacement de la carte après avoir fini de déplacer un marqueur
-            map.dragging.enable();
-            map.doubleClickZoom.enable();
-        }
-
         function onMarkerDrag(e) {
             const draggedMarker = e.target;
             const index = drawnMarkers.indexOf(draggedMarker);
@@ -406,18 +394,21 @@
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
 
-            const marker = L.circleMarker(latLng, { 
-                radius: 6, 
-                color: 'orange', 
-                fillColor: '#f97316', 
-                fillOpacity: 1,
-                draggable: true 
+            // MODIFICATION 1: Remplacement de L.circleMarker par L.marker avec icône personnalisée
+            const marker = L.marker(latLng, {
+                draggable: true,
+                icon: L.divIcon({
+                    className: "custom-waypoint",
+                    html: '<div style="width:12px;height:12px;background:#f97316;border:2px solid orange;border-radius:50%;"></div>',
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                })
             }).addTo(map);
 
             marker.on('contextmenu', deleteDrawnPoint);
-            marker.on('dragstart', onMarkerDragStart);
             marker.on('drag', onMarkerDrag);
-            marker.on('dragend', onMarkerDragEnd);
+            marker.on('mousedown', () => map.dragging.disable());
+            marker.on('mouseup', () => map.dragging.enable());
             drawnMarkers.push(marker);
 
             if (!drawnPolyline) {
@@ -787,17 +778,21 @@
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5,10' }).addTo(map);
                 
                 drawnMarkers = drawnPath.map(p => {
-                    const m = L.circleMarker(p, { 
-                        radius: 6, 
-                        color: 'orange', 
-                        fillColor: '#f97316', 
-                        fillOpacity: 1,
-                        draggable: true
+                    // MODIFICATION 2: Remplacement de L.circleMarker par L.marker avec icône personnalisée
+                    const m = L.marker(p, {
+                        draggable: true,
+                        icon: L.divIcon({
+                            className: "custom-waypoint",
+                            html: '<div style="width:12px;height:12px;background:#f97316;border:2px solid orange;border-radius:50%;"></div>',
+                            iconSize: [12, 12],
+                            iconAnchor: [6, 6]
+                        })
                     }).addTo(map);
+                    
                     m.on('contextmenu', deleteDrawnPoint);
-                    m.on('dragstart', onMarkerDragStart);
                     m.on('drag', onMarkerDrag);
-                    m.on('dragend', onMarkerDragEnd);
+                    m.on('mousedown', () => map.dragging.disable());
+                    m.on('mouseup', () => map.dragging.enable());
                     return m;
                 });
                 startDrawing();
