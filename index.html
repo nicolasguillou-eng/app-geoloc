@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.10</title>
+    <title>Géo-Navigation KMZ V1.11</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.10</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.11</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -181,6 +181,8 @@
         let recordedPolyline;
         let navigationPath = [];
         let navigationPolyline;
+        let navigationTracePath = []; // Pour la trace verte suivie
+        let navigationTracePolyline; // Objet polyline pour la trace
         let totalNavigationDistance = 0;
         let targetMarker = null;
         let currentTargetIndex = -1;
@@ -317,6 +319,14 @@
             }
             
             if (isNavigating) {
+                // Mise à jour de la trace verte suivie par l'utilisateur
+                navigationTracePath.push(latLng);
+                if (!navigationTracePolyline) {
+                    navigationTracePolyline = L.polyline(navigationTracePath, { color: 'green', weight: 6, opacity: 0.7 }).addTo(map);
+                } else {
+                    navigationTracePolyline.addLatLng(latLng);
+                }
+
                 if (!isOrientationSupported) {
                     if (lastPositionForCourse) {
                         const distanceMoved = calculateDistance(lastPositionForCourse, latLng);
@@ -453,6 +463,13 @@
             navigationPath = path;
             currentTargetIndex = 0;
             
+            // Initialisation de la trace suivie
+            navigationTracePath = [];
+            if (navigationTracePolyline) {
+                map.removeLayer(navigationTracePolyline);
+                navigationTracePolyline = null;
+            }
+
             lastPositionForCourse = null;
             isOrientationSupported = false;
 
@@ -501,6 +518,13 @@
             orientationMsg.classList.add('hidden');
             if(navigationPolyline) map.removeLayer(navigationPolyline);
             navigationPolyline = null;
+
+            // Nettoyage de la trace verte
+            if (navigationTracePolyline) {
+                map.removeLayer(navigationTracePolyline);
+                navigationTracePolyline = null;
+            }
+            navigationTracePath = [];
             
             if (targetMarker) {
                 map.removeLayer(targetMarker);
@@ -796,4 +820,3 @@
     </script>
 </body>
 </html>
-
