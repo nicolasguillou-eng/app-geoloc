@@ -734,12 +734,20 @@
             }).filter(Boolean);
             
             if (points.length > 0) {
+                // **MODIFICATION 1 : Sauvegarde dans le localStorage**
+                try {
+                    localStorage.setItem('lastKmlContent', kmlString);
+                } catch (e) {
+                    console.error("Erreur lors de la sauvegarde dans localStorage:", e);
+                    showNotification("Impossible de sauvegarder le parcours localement (stockage plein ?).", 4000, true);
+                }
+
                 recordedPath = points;
                 if (recordedPolyline) map.removeLayer(recordedPolyline);
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
                 map.fitBounds(recordedPolyline.getBounds());
                 updateUIState();
-                showNotification("Parcours chargé avec succès. Vous pouvez l'éditer ou démarrer la navigation.", 4000);
+                // La notification a été déplacée au chargement de la page pour éviter les doublons
             }
             else showNotification("Aucune coordonnée valide trouvée dans le fichier.", 3000, true);
         }
@@ -815,8 +823,16 @@
             initMap();
             startGeolocation();
             updateUIState();
+
+            // **MODIFICATION 2 : Chargement depuis le localStorage au démarrage**
+            const savedKml = localStorage.getItem('lastKmlContent');
+            if (savedKml) {
+                showNotification("Dernier parcours chargé depuis le stockage local.", 3000);
+                parseKml(savedKml);
+            }
         };
 
     </script>
 </body>
 </html>
+
