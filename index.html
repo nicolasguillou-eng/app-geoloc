@@ -588,9 +588,9 @@
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
 
-            if (distanceToNextWaypoint < 25 && currentTargetIndex < navigationPath.length - 1) {
+            if (distanceToNextWaypoint < 50 && currentTargetIndex < navigationPath.length - 1) {
                 updateTargetWaypoint(currentTargetIndex + 1);
-            } else if (distanceToNextWaypoint < 25 && currentTargetIndex === navigationPath.length - 1) {
+            } else if (distanceToNextWaypoint < 50 && currentTargetIndex === navigationPath.length - 1) {
                 statusMessage.textContent = "Vous êtes arrivé à destination !";
                 progressBar.style.width = '100%';
                 completionPercentage.textContent = `100 % complété`;
@@ -796,3 +796,4 @@
     </script>
 </body>
 </html>
+
