@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.14</title>
+    <title>Géo-Navigation KMZ V1.15</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.14</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.15</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -378,6 +378,18 @@
                 recordedPath = [...drawnPath];
                 if (recordedPolyline) map.removeLayer(recordedPolyline);
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
+                
+                // AJOUT : Sauvegarde du parcours validé dans le localStorage
+                const kmlContent = generateKmlString(recordedPath);
+                if (kmlContent) {
+                    try {
+                        localStorage.setItem('lastKmlContent', kmlContent);
+                        showNotification("Parcours sauvegardé localement.", 3000);
+                    } catch (e) {
+                        console.error("Erreur lors de la sauvegarde dans localStorage:", e);
+                        showNotification("Impossible de sauvegarder le parcours localement.", 4000, true);
+                    }
+                }
             } else if (recordedPath.length > 0) {
                 recordedPolyline = L.polyline(recordedPath, { color: 'red' }).addTo(map);
             }
@@ -428,6 +440,10 @@
         
         function onMapClick(e) {
             if (!isDrawing) return;
+            // Ne rien faire si on clique sur la carte (seul le clic sur la ligne est géré par onPolylineClick)
+            // sauf s'il n'y a pas encore de points
+            if (drawnPath.length > 0) return;
+
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
 
@@ -790,19 +806,28 @@
         }
         
         // --- GESTION DES FICHIERS KMZ/KML ---
+
+        // NOUVELLE FONCTION : Génère une chaîne de caractères KML à partir d'un parcours
+        function generateKmlString(path) {
+            if (!path || path.length < 1) return null;
+            
+            const isPoint = path.length === 1;
+            const coordinates = path.map(p => `${p[1]},${p[0]},0`).join(' ');
+            const geometry = isPoint 
+                ? `<Point><coordinates>${coordinates}</coordinates></Point>`
+                : `<LineString><coordinates>${coordinates}</coordinates></LineString>`;
+
+            return `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Mon Parcours</name><Placemark><name>Parcours</name>${geometry}</Placemark></Document></kml>`;
+        }
+
         function downloadKmz() {
             if (recordedPath.length < 1) {
                 showNotification("Le parcours est trop court pour être exporté.", 3000, true);
                 return;
             }
             
-            const isPoint = recordedPath.length === 1;
-            const coordinates = recordedPath.map(p => `${p[1]},${p[0]},0`).join(' ');
-            const geometry = isPoint 
-                ? `<Point><coordinates>${coordinates}</coordinates></Point>`
-                : `<LineString><coordinates>${coordinates}</coordinates></LineString>`;
-
-            const kmlContent = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Mon Parcours</name><Placemark><name>Parcours</name>${geometry}</Placemark></Document></kml>`;
+            // MODIFICATION : Utilise la nouvelle fonction pour générer le KML
+            const kmlContent = generateKmlString(recordedPath);
             
             const zip = new JSZip();
             zip.file("doc.kml", kmlContent);
