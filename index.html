@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.11</title>
+    <title>Géo-Navigation KMZ V1.13</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.11</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.13</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -141,7 +141,15 @@
                 <p id="last-segment-info"></p>
                 <p id="total-draw-distance-info" class="font-bold"></p>
             </div>
-            <div class="flex justify-center gap-4">
+            <div class="flex flex-wrap justify-center gap-4">
+                 <button id="simplify-draw-btn" class="flex items-center justify-center gap-2 bg-teal-500 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-teal-600 transition-colors duration-200">
+                    <i data-lucide="blending"></i>
+                    <span>Simplifier</span>
+                </button>
+                <button id="reverse-draw-btn" class="flex items-center justify-center gap-2 bg-cyan-500 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-cyan-600 transition-colors duration-200">
+                    <i data-lucide="repeat"></i>
+                    <span>Inverser</span>
+                </button>
                  <button id="confirm-draw-btn" class="flex items-center justify-center gap-2 bg-green-500 text-white font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-green-600 transition-colors duration-200">
                     <i data-lucide="check-circle"></i>
                     <span>Valider</span>
@@ -212,6 +220,8 @@
         const drawBtn = document.getElementById('draw-path-btn');
         const confirmDrawBtn = document.getElementById('confirm-draw-btn');
         const cancelDrawBtn = document.getElementById('cancel-draw-btn');
+        const simplifyDrawBtn = document.getElementById('simplify-draw-btn');
+        const reverseDrawBtn = document.getElementById('reverse-draw-btn');
         
         const mainControls = document.getElementById('main-controls');
         const drawControls = document.getElementById('draw-controls');
@@ -319,7 +329,6 @@
             }
             
             if (isNavigating) {
-                // Mise à jour de la trace verte suivie par l'utilisateur
                 navigationTracePath.push(latLng);
                 if (!navigationTracePolyline) {
                     navigationTracePolyline = L.polyline(navigationTracePath, { color: 'green', weight: 6, opacity: 0.7 }).addTo(map);
@@ -453,6 +462,81 @@
             totalDrawDistanceInfo.textContent = `Distance totale : ${formatDistance(totalDist)}`;
         }
 
+        function redrawDrawingLayer() {
+            if (drawnPolyline) map.removeLayer(drawnPolyline);
+            drawnMarkers.forEach(marker => map.removeLayer(marker));
+            drawnMarkers = [];
+
+            if (drawnPath.length > 0) {
+                drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
+                drawnMarkers = drawnPath.map(point => {
+                    const marker = L.marker(point, {
+                        draggable: true,
+                        icon: L.divIcon({
+                            className: "custom-waypoint",
+                            html: '<div style="width:12px;height:12px;background:#f97316;border:2px solid orange;border-radius:50%;"></div>',
+                            iconSize: [12, 12],
+                            iconAnchor: [6, 6]
+                        })
+                    }).addTo(map);
+                    marker.on('contextmenu', deleteDrawnPoint);
+                    marker.on('drag', onMarkerDrag);
+                    marker.on('mousedown', () => map.dragging.disable());
+                    marker.on('mouseup', () => map.dragging.enable());
+                    return marker;
+                });
+            }
+            updateDrawingInfo();
+        }
+        
+        function simplifyDrawPath() {
+            if (drawnPath.length < 3) {
+                showNotification("Pas assez de points pour simplifier.", 2000, true);
+                return;
+            }
+
+            const SIGNIFICANT_TURN_ANGLE = 20; // degrees
+            const MIN_DIST_TURN = 50; // meters
+            const MIN_DIST_STRAIGHT = 100; // meters
+
+            let simplifiedPath = [drawnPath[0]];
+            let distanceAccumulator = 0;
+
+            for (let i = 1; i < drawnPath.length - 1; i++) {
+                distanceAccumulator += calculateDistance(drawnPath[i-1], drawnPath[i]);
+                const turnAngle = calculateTurnAngle(drawnPath[i-1], drawnPath[i], drawnPath[i+1]);
+                
+                let keepPoint = false;
+                if (turnAngle > SIGNIFICANT_TURN_ANGLE && distanceAccumulator >= MIN_DIST_TURN) {
+                    keepPoint = true;
+                } else if (distanceAccumulator >= MIN_DIST_STRAIGHT) {
+                    keepPoint = true;
+                }
+
+                if (keepPoint) {
+                    simplifiedPath.push(drawnPath[i]);
+                    distanceAccumulator = 0;
+                }
+            }
+            simplifiedPath.push(drawnPath[drawnPath.length - 1]);
+
+            const originalCount = drawnPath.length;
+            drawnPath = simplifiedPath;
+            redrawDrawingLayer();
+            showNotification(`Parcours simplifié de ${originalCount} à ${drawnPath.length} points.`);
+        }
+
+        function reverseDrawPath() {
+            if (drawnPath.length < 2) {
+                showNotification("Pas assez de points pour inverser.", 2000, true);
+                return;
+            }
+            drawnPath.reverse();
+            redrawDrawingLayer();
+            showNotification("Parcours inversé.");
+        }
+
+
         // --- LOGIQUE DE NAVIGATION ET BOUSSOLE ---
         function startNavigation(path) {
             if (path.length < 1) { 
@@ -463,7 +547,6 @@
             navigationPath = path;
             currentTargetIndex = 0;
             
-            // Initialisation de la trace suivie
             navigationTracePath = [];
             if (navigationTracePolyline) {
                 map.removeLayer(navigationTracePolyline);
@@ -519,7 +602,6 @@
             if(navigationPolyline) map.removeLayer(navigationPolyline);
             navigationPolyline = null;
 
-            // Nettoyage de la trace verte
             if (navigationTracePolyline) {
                 map.removeLayer(navigationTracePolyline);
                 navigationTracePolyline = null;
@@ -674,6 +756,13 @@
         function toDeg(rad) { return rad * 180 / Math.PI; }
         function calculateDistance(p1, p2) { const R=6371e3;const[lat1,lon1]=[toRad(p1[0]),toRad(p1[1])];const[lat2,lon2]=[toRad(p2[0]),toRad(p2[1])];const dLat=lat2-lat1,dLon=lon2-lon1;const a=Math.sin(dLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
         function calculateBearing(p1, p2) { const[lat1,lon1]=[toRad(p1[0]),toRad(p1[1])];const[lat2,lon2]=[toRad(p2[0]),toRad(p2[1])];const y=Math.sin(lon2-lon1)*Math.cos(lat2);const x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(lon2-lon1);return(toDeg(Math.atan2(y,x))+360)%360; }
+        function calculateTurnAngle(p1, p2, p3) {
+            const bearing1 = calculateBearing(p1, p2);
+            const bearing2 = calculateBearing(p2, p3);
+            let angle = Math.abs(bearing1 - bearing2);
+            if (angle > 180) angle = 360 - angle;
+            return angle;
+        }
         
         // --- GESTION DES FICHIERS KMZ/KML ---
         function downloadKmz() {
@@ -765,6 +854,9 @@
         loadInput.addEventListener('change', loadFile);
         orientationMsg.addEventListener('click', requestOrientationPermission);
         
+        simplifyDrawBtn.addEventListener('click', simplifyDrawPath);
+        reverseDrawBtn.addEventListener('click', reverseDrawPath);
+
         prevWaypointBtn.addEventListener('click', () => { if (isNavigating && currentTargetIndex > 0) updateTargetWaypoint(currentTargetIndex - 1); });
         nextWaypointBtn.addEventListener('click', () => { if (isNavigating && currentTargetIndex < navigationPath.length - 1) updateTargetWaypoint(currentTargetIndex + 1); });
         stopNavigateBtn.addEventListener('click', stopNavigation);
@@ -773,27 +865,8 @@
         editBtn.addEventListener('click', () => {
             if (recordedPath.length > 0) {
                 drawnPath = [...recordedPath];
-                if (drawnPolyline) map.removeLayer(drawnPolyline);
-                drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5,10' }).addTo(map);
-                
-                drawnMarkers = drawnPath.map(p => {
-                    const m = L.marker(p, {
-                        draggable: true,
-                        icon: L.divIcon({
-                            className: "custom-waypoint",
-                            html: '<div style="width:12px;height:12px;background:#f97316;border:2px solid orange;border-radius:50%;"></div>',
-                            iconSize: [12, 12],
-                            iconAnchor: [6, 6]
-                        })
-                    }).addTo(map);
-                    
-                    m.on('contextmenu', deleteDrawnPoint);
-                    m.on('drag', onMarkerDrag);
-                    m.on('mousedown', () => map.dragging.disable());
-                    m.on('mouseup', () => map.dragging.enable());
-                    return m;
-                });
                 startDrawing();
+                redrawDrawingLayer();
             }
         });
 
