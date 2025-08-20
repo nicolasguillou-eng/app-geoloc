@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.16</title>
+    <title>Géo-Navigation KMZ V1.17</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.16</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.17</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -417,6 +417,9 @@
 
         function onPolylineClick(e) {
             if (!isDrawing) return;
+            // CORRECTION : Empêche le clic de se propager à la carte, ce qui ajoutait un deuxième point.
+            L.DomEvent.stopPropagation(e);
+
             const clickedPoint = e.latlng;
             let closestSegmentIndex = -1;
             let minDistance = Infinity;
@@ -439,9 +442,6 @@
         
         function onMapClick(e) {
             if (!isDrawing) return;
-
-            // CORRECTION : La ligne qui bloquait l'ajout de points a été supprimée.
-            // if (drawnPath.length > 0) return; 
 
             const latLng = [e.latlng.lat, e.latlng.lng];
             drawnPath.push(latLng);
