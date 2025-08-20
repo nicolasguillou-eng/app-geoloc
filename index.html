@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.13</title>
+    <title>Géo-Navigation KMZ V1.14</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -64,7 +64,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.13</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.14</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -136,7 +136,7 @@
         </div>
         
         <div id="draw-controls" class="hidden">
-            <p class="text-center text-blue-600 font-semibold mb-2">Mode création : cliquez pour ajouter, clic droit pour supprimer, glissez pour déplacer.</p>
+            <p class="text-center text-blue-600 font-semibold mb-2">Mode création : cliquez sur la ligne pour ajouter un point, clic droit pour supprimer, glissez pour déplacer.</p>
             <div id="draw-info" class="text-center text-sm text-gray-600 my-2">
                 <p id="last-segment-info"></p>
                 <p id="total-draw-distance-info" class="font-bold"></p>
@@ -404,6 +404,28 @@
             }
         }
 
+        function onPolylineClick(e) {
+            if (!isDrawing) return;
+            const clickedPoint = e.latlng;
+            let closestSegmentIndex = -1;
+            let minDistance = Infinity;
+
+            for (let i = 0; i < drawnPath.length - 1; i++) {
+                const p1 = map.latLngToLayerPoint(L.latLng(drawnPath[i]));
+                const p2 = map.latLngToLayerPoint(L.latLng(drawnPath[i + 1]));
+                const clickP = map.latLngToLayerPoint(clickedPoint);
+                const distance = L.LineUtil.pointToSegmentDistance(clickP, p1, p2);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestSegmentIndex = i;
+                }
+            }
+            if (closestSegmentIndex !== -1) {
+                drawnPath.splice(closestSegmentIndex + 1, 0, [clickedPoint.lat, clickedPoint.lng]);
+                redrawDrawingLayer();
+            }
+        }
+        
         function onMapClick(e) {
             if (!isDrawing) return;
             const latLng = [e.latlng.lat, e.latlng.lng];
@@ -427,6 +449,7 @@
 
             if (!drawnPolyline) {
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
+                drawnPolyline.on('click', onPolylineClick);
             } else {
                 drawnPolyline.addLatLng(latLng);
             }
@@ -469,6 +492,8 @@
 
             if (drawnPath.length > 0) {
                 drawnPolyline = L.polyline(drawnPath, { color: 'orange', dashArray: '5, 10' }).addTo(map);
+                drawnPolyline.on('click', onPolylineClick);
+                
                 drawnMarkers = drawnPath.map(point => {
                     const marker = L.marker(point, {
                         draggable: true,
