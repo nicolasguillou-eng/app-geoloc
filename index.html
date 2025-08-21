@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.19</title>
+    <title>Géo-Navigation KMZ V1.20</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -69,7 +69,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.19</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.20</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -108,6 +108,11 @@
                         <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
                     </div>
                     <p id="completion-percentage" class="text-sm text-gray-500 text-center"></p>
+                </div>
+                <!-- NOUVEAU : Case à cocher pour l'autoscale -->
+                <div class="mt-3 flex items-center justify-center">
+                    <input type="checkbox" id="autoscale-checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" checked>
+                    <label for="autoscale-checkbox" class="ml-2 block text-sm text-gray-900">Autoscale</label>
                 </div>
             </div>
         </div>
@@ -194,8 +199,8 @@
         let recordedPolyline;
         let navigationPath = [];
         let navigationPolyline;
-        let navigationTracePath = []; // Pour la trace verte suivie
-        let navigationTracePolyline; // Objet polyline pour la trace
+        let navigationTracePath = [];
+        let navigationTracePolyline;
         let totalNavigationDistance = 0;
         let targetMarker = null;
         let currentTargetIndex = -1;
@@ -206,6 +211,7 @@
         let isNavigating = false;
         let isDrawing = false;
         let geolocationAvailable = true;
+        let isAutoscaleEnabled = true; // NOUVEAU
 
         // Variables pour la direction de secours par GPS
         let lastPositionForCourse = null;
@@ -218,7 +224,7 @@
         let drawnPolylineHitbox; 
         let drawnMarkers = [];
 
-        // NOUVEAU : Icône personnalisée pour le marqueur utilisateur (triangle bleu)
+        // Icône personnalisée pour le marqueur utilisateur (triangle bleu)
         const userIcon = L.divIcon({
             className: 'user-marker-icon',
             html: `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="#3b82f6" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`,
@@ -236,16 +242,13 @@
         const cancelDrawBtn = document.getElementById('cancel-draw-btn');
         const simplifyDrawBtn = document.getElementById('simplify-draw-btn');
         const reverseDrawBtn = document.getElementById('reverse-draw-btn');
-        
         const mainControls = document.getElementById('main-controls');
         const drawControls = document.getElementById('draw-controls');
         const mapElement = document.getElementById('map');
         const geolocationStatusDiv = document.getElementById('geolocation-status');
         const geolocationStatusMessage = document.getElementById('geolocation-status-message');
-        
         const lastSegmentInfo = document.getElementById('last-segment-info');
         const totalDrawDistanceInfo = document.getElementById('total-draw-distance-info');
-        
         const compassArrow = document.getElementById('compass-arrow');
         const navigationSection = document.getElementById('navigation-section');
         const statusMessage = document.getElementById('status-message');
@@ -257,7 +260,7 @@
         const prevWaypointBtn = document.getElementById('prev-waypoint-btn');
         const nextWaypointBtn = document.getElementById('next-waypoint-btn');
         const stopNavigateBtn = document.getElementById('stop-navigate-btn');
-        
+        const autoscaleCheckbox = document.getElementById('autoscale-checkbox'); // NOUVEAU
         const notificationBanner = document.getElementById('notification-banner');
         const notificationMessage = document.getElementById('notification-message');
         let notificationTimeout;
@@ -324,7 +327,6 @@
             watchId = navigator.geolocation.watchPosition(handlePositionUpdate, handlePositionError, options);
         }
         
-        // MODIFIÉ : Utilisation du marqueur personnalisé (triangle) au lieu du cercle
         function handlePositionUpdate(position) {
             const { latitude, longitude } = position.coords;
             const latLng = [latitude, longitude];
@@ -356,7 +358,7 @@
                         if (distanceMoved > 5) {
                             userCourse = calculateBearing(lastPositionForCourse, latLng);
                             updateCompass(userCourse);
-                            updateUserMarkerOrientation(userCourse); // NOUVEAU : Orienter le triangle
+                            updateUserMarkerOrientation(userCourse);
                             lastPositionForCourse = latLng;
                             if(statusMessage.textContent.startsWith("Déplacez-vous")) {
                                 statusMessage.textContent = "Suivez la flèche rouge";
@@ -379,7 +381,6 @@
             updateUIState();
         }
 
-        // NOUVEAU : Fonction pour faire pivoter l'icône du marqueur utilisateur
         function updateUserMarkerOrientation(degrees) {
             if (!userMarker || !userMarker._icon) return;
             const iconElement = userMarker._icon.querySelector('svg');
@@ -540,9 +541,9 @@
                 return;
             }
 
-            const SIGNIFICANT_TURN_ANGLE = 20; // degrees
-            const MIN_DIST_TURN = 50; // meters
-            const MIN_DIST_STRAIGHT = 100; // meters
+            const SIGNIFICANT_TURN_ANGLE = 20;
+            const MIN_DIST_TURN = 50;
+            const MIN_DIST_STRAIGHT = 100;
 
             let simplifiedPath = [drawnPath[0]];
             let distanceAccumulator = 0;
@@ -707,7 +708,6 @@
             nextWaypointBtn.disabled = isSinglePoint || currentTargetIndex >= navigationPath.length - 1;
         }
 
-        // MODIFIÉ : Ajout du redimensionnement automatique de la carte
         function updateNavigation(currentLatLng) {
             if (!isNavigating || currentTargetIndex < 0) return;
             
@@ -737,13 +737,15 @@
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
 
-            // NOUVEAU : Logique de redimensionnement de la carte
-            const pointsToView = [currentLatLng, targetLatLng];
-            if (currentTargetIndex > 0) {
-                pointsToView.push(navigationPath[currentTargetIndex - 1]);
+            // MODIFIÉ : Logique de redimensionnement conditionnelle
+            if (isAutoscaleEnabled) {
+                const pointsToView = [currentLatLng, targetLatLng];
+                if (currentTargetIndex > 0) {
+                    pointsToView.push(navigationPath[currentTargetIndex - 1]);
+                }
+                const bounds = L.latLngBounds(pointsToView);
+                map.fitBounds(bounds, { padding: [50, 50] });
             }
-            const bounds = L.latLngBounds(pointsToView);
-            map.fitBounds(bounds, { padding: [50, 50] }); // Ajoute une marge de 50px
 
             if (distanceToNextWaypoint < 50 && currentTargetIndex < navigationPath.length - 1) {
                 updateTargetWaypoint(currentTargetIndex + 1);
@@ -756,7 +758,6 @@
             }
         }
         
-        // MODIFIÉ : Orientation du marqueur en plus de la boussole
         function handleOrientation(event) {
             let heading = event.webkitCompassHeading || event.alpha;
             if (typeof heading === 'number' && !isNaN(heading)) {
@@ -766,7 +767,7 @@
                     statusMessage.textContent = "Suivez la flèche rouge";
                 }
                 updateCompass(heading);
-                updateUserMarkerOrientation(heading); // NOUVEAU : Orienter le triangle
+                updateUserMarkerOrientation(heading);
             }
         }
         
@@ -912,13 +913,12 @@
         downloadBtn.addEventListener('click', downloadKmz);
         loadInput.addEventListener('change', loadFile);
         orientationMsg.addEventListener('click', requestOrientationPermission);
-        
         simplifyDrawBtn.addEventListener('click', simplifyDrawPath);
         reverseDrawBtn.addEventListener('click', reverseDrawPath);
-
         prevWaypointBtn.addEventListener('click', () => { if (isNavigating && currentTargetIndex > 0) updateTargetWaypoint(currentTargetIndex - 1); });
         nextWaypointBtn.addEventListener('click', () => { if (isNavigating && currentTargetIndex < navigationPath.length - 1) updateTargetWaypoint(currentTargetIndex + 1); });
         stopNavigateBtn.addEventListener('click', stopNavigation);
+        autoscaleCheckbox.addEventListener('change', (e) => { isAutoscaleEnabled = e.target.checked; }); // NOUVEAU
 
         const editBtn = document.getElementById('edit-path-btn');
         editBtn.addEventListener('click', () => {
