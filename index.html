@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.21</title>
+    <title>Géo-Navigation KMZ V1.22</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -69,7 +69,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.21</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.22</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -211,7 +211,7 @@
         let isDrawing = false;
         let geolocationAvailable = true;
         let isAutoscaleEnabled = true;
-        const autoscalePadding = [200, 200]; // MODIFIÉ : Padding configurable ici
+        const autoscalePadding = [200, 200];
 
         // Variables pour la direction de secours par GPS
         let lastPositionForCourse = null;
@@ -737,8 +737,9 @@
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
 
-            // MODIFIÉ : Utilisation de la variable pour le padding
+            // CORRIGÉ : Ajout de invalidateSize() avant fitBounds()
             if (isAutoscaleEnabled) {
+                map.invalidateSize(); // Force la mise à jour de la taille de la carte
                 const pointsToView = [currentLatLng, targetLatLng];
                 if (currentTargetIndex > 0) {
                     pointsToView.push(navigationPath[currentTargetIndex - 1]);
