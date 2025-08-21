@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.22</title>
+    <title>Géo-Navigation KMZ V1.23</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -69,7 +69,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.22</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.23</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -737,13 +737,11 @@
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
 
-            // CORRIGÉ : Ajout de invalidateSize() avant fitBounds()
+            // CORRIGÉ : Simplification de la logique de zoom pour plus de stabilité
             if (isAutoscaleEnabled) {
                 map.invalidateSize(); // Force la mise à jour de la taille de la carte
+                // On ne prend que la position actuelle et la destination pour le zoom
                 const pointsToView = [currentLatLng, targetLatLng];
-                if (currentTargetIndex > 0) {
-                    pointsToView.push(navigationPath[currentTargetIndex - 1]);
-                }
                 const bounds = L.latLngBounds(pointsToView);
                 map.fitBounds(bounds, { padding: autoscalePadding });
             }
