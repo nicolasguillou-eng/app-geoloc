@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.23</title>
+    <title>Géo-Navigation KMZ V1.24</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -69,7 +69,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.23</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.24</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -211,7 +211,6 @@
         let isDrawing = false;
         let geolocationAvailable = true;
         let isAutoscaleEnabled = true;
-        const autoscalePadding = [200, 200];
 
         // Variables pour la direction de secours par GPS
         let lastPositionForCourse = null;
@@ -737,13 +736,12 @@
                 completionPercentage.textContent = `${percentage.toFixed(1)} % complété`;
             }
 
-            // CORRIGÉ : Simplification de la logique de zoom pour plus de stabilité
+            // CORRIGÉ : Logique de zoom avec marge en mètres et zoom maximum
             if (isAutoscaleEnabled) {
-                map.invalidateSize(); // Force la mise à jour de la taille de la carte
-                // On ne prend que la position actuelle et la destination pour le zoom
-                const pointsToView = [currentLatLng, targetLatLng];
-                const bounds = L.latLngBounds(pointsToView);
-                map.fitBounds(bounds, { padding: autoscalePadding });
+                map.invalidateSize(); 
+                const bounds = L.latLngBounds([currentLatLng, targetLatLng]);
+                const expandedBounds = expandBoundsByMeters(bounds, 200); // 200 mètres
+                map.fitBounds(expandedBounds, { maxZoom: 17 }); // Ajout d'un zoom maximum
             }
 
             if (distanceToNextWaypoint < 50 && currentTargetIndex < navigationPath.length - 1) {
@@ -816,6 +814,22 @@
             if (angle > 180) angle = 360 - angle;
             return angle;
         }
+        // NOUVEAU : Fonction pour étendre une zone géographique par une distance en mètres
+        function expandBoundsByMeters(bounds, meters) {
+            const METERS_PER_DEGREE_LAT = 111132.954; // Approximation
+            const latOffset = meters / METERS_PER_DEGREE_LAT;
+            
+            const centerLatRad = bounds.getCenter().lat * (Math.PI / 180);
+            const lonOffset = meters / (METERS_PER_DEGREE_LAT * Math.cos(centerLatRad));
+
+            const southWest = bounds.getSouthWest();
+            const northEast = bounds.getNorthEast();
+
+            const newSouthWest = L.latLng(southWest.lat - latOffset, southWest.lng - lonOffset);
+            const newNorthEast = L.latLng(northEast.lat + latOffset, northEast.lng + lonOffset);
+
+            return L.latLngBounds(newSouthWest, newNorthEast);
+        }
         
         // --- GESTION DES FICHIERS KMZ/KML ---
         function generateKmlString(path) {
@@ -887,7 +901,7 @@
             
             if (points.length > 0) {
                 try {
-                    localStorage.setItem('lastKmlContent', kmlString);
+                    localStorage.setItem('lastKmlContent', kmlContent);
                 } catch (e) {
                     console.error("Erreur lors de la sauvegarde dans localStorage:", e);
                     showNotification("Impossible de sauvegarder le parcours localement.", 4000, true);
