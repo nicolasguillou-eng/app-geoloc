@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Géo-Navigation KMZ V1.25</title>
+    <title>Géo-Navigation KMZ V1.26</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -69,7 +69,7 @@
 
     <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 space-y-6">
         <header class="text-center">
-            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.25</h1>
+            <h1 class="text-3xl font-bold text-gray-800">Géo-Navigation KMZ V1.26</h1>
             <p class="text-gray-500 mt-1">Enregistrez, créez, exportez et suivez vos parcours.</p>
         </header>
 
@@ -343,7 +343,7 @@
                 else recordedPolyline.addLatLng(latLng);
             }
             
-            if (isNavigating) {
+            if (isNavigating || isRecording) {
                 navigationTracePath.push(latLng);
                 if (!navigationTracePolyline) {
                     navigationTracePolyline = L.polyline(navigationTracePath, { color: 'green', weight: 6, opacity: 0.7 }).addTo(map);
@@ -973,3 +973,4 @@
     </script>
 </body>
 </html>
+
